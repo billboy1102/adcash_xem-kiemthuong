@@ -8,23 +8,82 @@ Một source code dùng chung cho:
 
 ## Trạng thái hiện tại
 
-Ứng dụng đã có giao diện responsive và luồng demo cho:
+App đã bỏ hoàn toàn quảng cáo giả 6 giây và localStorage balance.
 
-- Trang chủ + số dư
-- Danh sách nhiệm vụ thưởng
-- Mô phỏng hoàn thành nhiệm vụ và cộng thưởng
-- Ví + lịch sử giao dịch
-- Rút tiền qua MoMo / ngân hàng (mô phỏng)
-- Hồ sơ người dùng
-- Lưu trạng thái demo bằng localStorage
-- Schema Supabase an toàn ở `supabase/schema.sql`
+Luồng hiện tại:
 
-> Phần thưởng hiện tại là dữ liệu demo. Production không được tin dữ liệu cộng tiền từ client. Chỉ backend/postback đã xác minh mới được ghi `earning_events` và cập nhật `wallets`.
+1. App tạo/khôi phục Supabase anonymous user.
+2. Monlix nhận `userid` là UUID Supabase của user.
+3. Monlix gửi S2S postback về Supabase Edge Function sau conversion hợp lệ.
+4. Edge Function xác minh `secretKey`, gọi RPC server-side.
+5. `transaction_id` là UNIQUE nên callback lặp không được cộng tiền hai lần.
+6. `status=2` được xử lý như chargeback và trừ lại reward đã ghi.
+7. Client chỉ đọc ví/lịch sử của chính user qua RLS.
+8. Rút tiền gọi RPC server-side, kiểm tra số dư và trừ ví atomically trước khi tạo yêu cầu pending.
+
+Không có API nào cho client tự insert reward hoặc tự update balance.
+
+## Monlix cần cấu hình
+
+Monlix public HTML5 integration dùng:
+
+```text
+https://offers.monlix.com/?appid=<APP_ID>&userid=<USER_ID>&subid=adcash
+```
+
+Repo lấy App ID từ GitHub Actions repository variable:
+
+```text
+MONLIX_APP_ID
+```
+
+Workflow đưa biến này vào `VITE_MONLIX_APP_ID` cho cả web, APK và AAB.
+
+### Postback URL
+
+Trong Monlix Dashboard đặt callback URL thành:
+
+```text
+https://lmtcnbhdnryivjgupuct.supabase.co/functions/v1/adcash-monlix-postback?userId={{userId}}&userIp={{userIp}}&countryCode={{countryCode}}&secretKey={{secretKey}}&taskName={{taskName}}&transactionId={{transactionId}}&rewardCurrency={{rewardCurrency}}&rewardValue={{rewardValue}}&payout={{payout}}&subId={{subId}}&status={{status}}
+```
+
+Supabase Edge Function phải có secret môi trường:
+
+```text
+MONLIX_SECRET_KEY=<Secret Key của site/app trong Monlix Dashboard>
+```
+
+Secret này **không** được đưa vào React, APK, AAB hoặc GitHub repo public.
+
+### Currency / reward
+
+Backend hiện lấy `rewardValue` Monlix gửi về làm số VND được cộng cho user. Vì vậy site/app Monlix phải cấu hình reward currency/multiplier đúng với mô hình chia doanh thu của Adcash.
+
+Nếu Adcash chỉ cho phép **xem video quảng cáo**, phía Monlix cũng phải cấu hình placement/site chỉ có Rewarded Video. HTML5 public docs của Monlix chỉ mô tả App ID + User ID; nếu account bật thêm offer/survey thì Monlix có thể hiển thị chúng.
+
+## Supabase production backend
+
+Project hiện dùng: `Bobbey` (`lmtcnbhdnryivjgupuct`).
+
+Adcash dùng các object riêng để không đụng dữ liệu project khác:
+
+- `adcash_wallets`
+- `adcash_reward_events`
+- `adcash_withdrawals`
+- `adcash_apply_monlix_postback(...)`
+- `adcash_request_withdrawal(...)`
+- Edge Function `adcash-monlix-postback`
+
+Schema nằm ở `supabase/schema.sql` và function source ở `supabase/functions/adcash-monlix-postback/index.ts`.
+
+Supabase Anonymous Sign-Ins phải được bật để app tạo UUID cho user mà không bắt đăng ký tài khoản.
 
 ## Phát triển local
 
 ```bash
 npm install
+cp .env.example .env.local
+# điền VITE_MONLIX_APP_ID
 npm run dev
 ```
 
@@ -49,32 +108,18 @@ cd android
 
 Workflow `.github/workflows/build.yml` chạy mỗi khi có commit mới vào `main`:
 
-1. Build web và deploy lên GitHub Pages.
-2. Build lại asset theo đường dẫn tương thích Capacitor.
+1. Build web và deploy GitHub Pages.
+2. Build lại assets bằng đường dẫn tương thích Capacitor.
 3. Tạo Android project từ cùng source.
 4. Xuất APK debug.
 5. Xuất AAB debug.
-6. Upload APK/AAB vào Artifacts của GitHub Actions.
+6. Upload APK/AAB vào GitHub Actions Artifacts.
 
-Vì cả ba bản dùng chung `src/`, mọi chỉnh sửa giao diện/logic trong source sẽ đi vào cả web, APK và AAB ở lần build tiếp theo.
+Mọi thay đổi trong `src/` đi vào cả ba bản.
 
-## AAB để đưa lên Google Play
+## Google Play
 
-Workflow hiện xuất **debug APK/AAB** để test tự động. AAB đưa lên Google Play nên được ký bằng upload key riêng. Không commit keystore hoặc mật khẩu vào repo public; hãy lưu chúng trong GitHub Actions Secrets và thêm bước release signing khi chuẩn bị phát hành.
-
-## Backend Supabase
-
-File `supabase/schema.sql` chứa cấu trúc:
-
-- `profiles`
-- `wallets`
-- `reward_tasks`
-- `earning_events`
-- `withdrawals`
-- RLS cho dữ liệu người dùng
-- Trigger khởi tạo profile + wallet
-
-Thiết kế cố ý **không cho client tự insert earning event, tự sửa balance hoặc tự tạo withdrawal trực tiếp**. Các thao tác tài chính production phải qua server/Edge Function đáng tin cậy để chống gian lận và replay.
+Workflow hiện xuất debug APK/AAB để test. AAB production cần upload keystore + release signing qua GitHub Actions Secrets; không commit keystore hoặc mật khẩu vào repo public.
 
 ## Tên / package Android
 
