@@ -1,0 +1,173 @@
+.live-pill {
+  color: #c8ffdb;
+  border-color: rgba(89, 227, 145, .34);
+  background: rgba(89, 227, 145, .14);
+}
+
+.integration-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 28px;
+}
+
+.integration-state > svg {
+  flex: 0 0 auto;
+  color: var(--green);
+  margin-top: 2px;
+}
+
+.integration-state h2 {
+  margin: 0 0 7px;
+  font-size: 22px;
+}
+
+.integration-state p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.integration-state.error-state > svg,
+.integration-state.warning-state > svg {
+  color: var(--amber);
+}
+
+.muted-line {
+  font-size: 13px;
+}
+
+.spin {
+  animation: adcash-spin .9s linear infinite;
+}
+
+@keyframes adcash-spin {
+  to { transform: rotate(360deg); }
+}
+
+.server-flow-card {
+  overflow: hidden;
+}
+
+.server-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flow-step {
+  display: flex;
+  gap: 12px;
+  min-height: 112px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .018);
+}
+
+.flow-step strong,
+.flow-step span {
+  display: block;
+}
+
+.flow-step strong {
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.flow-step span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.monlix-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.monlix-heading {
+  padding: 22px 22px 0;
+}
+
+.live-policy {
+  margin: 18px 22px;
+}
+
+.monlix-frame-shell {
+  margin: 0 22px;
+  min-height: 680px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.monlix-frame {
+  display: block;
+  width: 100%;
+  min-height: 680px;
+  border: 0;
+  background: #fff;
+}
+
+.monlix-footnote {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 16px 22px 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.monlix-footnote svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.empty-ledger {
+  padding: 28px 16px;
+  color: var(--muted);
+  text-align: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 14px;
+}
+
+.uuid-text {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@media (max-width: 820px) {
+  .server-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-step {
+    min-height: 0;
+  }
+
+  .monlix-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .monlix-frame-shell {
+    margin: 0 12px;
+    min-height: 620px;
+    border-radius: 14px;
+  }
+
+  .monlix-frame {
+    min-height: 620px;
+  }
+
+  .live-policy {
+    margin: 14px 12px;
+  }
+
+  .monlix-footnote {
+    padding-inline: 14px;
+  }
+}
