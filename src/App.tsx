@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   BadgeCheck,
@@ -6,6 +7,7 @@ import {
   BarChart3,
   Bell,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
@@ -20,17 +22,18 @@ import {
   MessageSquareText,
   PlayCircle,
   RotateCcw,
+  Share2,
   ShieldCheck,
   Smartphone,
   Sparkles,
   Trophy,
   UserRound,
+  Users,
   WalletCards,
   X,
-  Zap,
 } from 'lucide-react'
 
-type View = 'home' | 'earn' | 'wallet' | 'withdraw' | 'profile'
+type View = 'home' | 'earn' | 'checkin' | 'referral' | 'wallet' | 'withdraw' | 'profile'
 type TransactionStatus = 'done' | 'pending'
 
 type Transaction = {
@@ -59,6 +62,9 @@ type AppState = {
   completedTaskIds: string[]
   transactions: Transaction[]
   userCode: string
+  lastCheckInDate: string
+  checkInStreak: number
+  referralCount: number
 }
 
 const money = new Intl.NumberFormat('vi-VN', {
@@ -68,6 +74,9 @@ const money = new Intl.NumberFormat('vi-VN', {
 })
 
 const compactMoney = (value: number) => `${new Intl.NumberFormat('vi-VN').format(value)}đ`
+const CHECKIN_REWARDS = [150, 200, 250, 300, 400, 500, 1000]
+const REFERRAL_REWARD = 5_000
+const INVITE_BASE_URL = 'https://billboy1102.github.io/adcash_xem-kiemthuong/'
 
 const initialTransactions: Transaction[] = [
   {
@@ -102,6 +111,9 @@ const defaultState: AppState = {
   completedTaskIds: [],
   transactions: initialTransactions,
   userCode: `ADC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+  lastCheckInDate: '',
+  checkInStreak: 0,
+  referralCount: 0,
 }
 
 const tasks: TaskItem[] = [
@@ -123,15 +135,6 @@ const tasks: TaskItem[] = [
     duration: '2–3 phút',
     category: 'Khảo sát',
     icon: MessageSquareText,
-  },
-  {
-    id: 'daily-check',
-    title: 'Điểm danh hôm nay',
-    description: 'Mở ứng dụng mỗi ngày để nhận phần thưởng duy trì.',
-    reward: 150,
-    duration: '10 giây',
-    category: 'Hằng ngày',
-    icon: Zap,
   },
   {
     id: 'app-offer',
@@ -156,15 +159,52 @@ const tasks: TaskItem[] = [
 const navItems: Array<{ id: View; label: string; icon: LucideIcon }> = [
   { id: 'home', label: 'Trang chủ', icon: Home },
   { id: 'earn', label: 'Kiếm thưởng', icon: Sparkles },
+  { id: 'checkin', label: 'Điểm danh hàng ngày', icon: CalendarDays },
+  { id: 'referral', label: 'Giới thiệu bạn bè', icon: Users },
   { id: 'wallet', label: 'Ví', icon: WalletCards },
   { id: 'withdraw', label: 'Rút tiền', icon: Landmark },
   { id: 'profile', label: 'Hồ sơ', icon: UserRound },
 ]
 
+const mobileNavItems = navItems.filter((item) =>
+  ['home', 'earn', 'checkin', 'referral', 'wallet'].includes(item.id),
+)
+
+function todayKey() {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function isYesterday(value: string) {
+  if (!value) return false
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return false
+
+  const last = Date.UTC(year, month - 1, day)
+  const now = new Date()
+  const current = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+  return current - last === 86_400_000
+}
+
 function loadState(): AppState {
   try {
     const saved = localStorage.getItem('adcash-demo-state-v1')
-    if (saved) return JSON.parse(saved) as AppState
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<AppState>
+      return {
+        ...defaultState,
+        ...parsed,
+        completedTaskIds: parsed.completedTaskIds ?? [],
+        transactions: parsed.transactions ?? [...initialTransactions],
+        userCode: parsed.userCode || defaultState.userCode,
+        lastCheckInDate: parsed.lastCheckInDate ?? '',
+        checkInStreak: parsed.checkInStreak ?? 0,
+        referralCount: parsed.referralCount ?? 0,
+      }
+    }
   } catch {
     // Ignore corrupted local demo state.
   }
@@ -200,6 +240,7 @@ export default function App() {
   const completedCount = state.completedTaskIds.length
   const progress = Math.min(100, Math.round((completedCount / tasks.length) * 100))
   const availableTasks = tasks.filter((task) => !state.completedTaskIds.includes(task.id))
+  const checkedInToday = state.lastCheckInDate === todayKey()
 
   const title = useMemo(() => {
     return navItems.find((item) => item.id === view)?.label ?? 'Adcash'
@@ -232,6 +273,65 @@ export default function App() {
     }))
     setActiveTask(null)
     setToast(`Đã cộng ${compactMoney(task.reward)} vào ví demo`)
+  }
+
+  const claimDailyCheckIn = () => {
+    const today = todayKey()
+    if (state.lastCheckInDate === today) {
+      setToast('Hôm nay đã điểm danh rồi')
+      return
+    }
+
+    const nextStreak = isYesterday(state.lastCheckInDate)
+      ? Math.min(7, state.checkInStreak + 1)
+      : 1
+    const reward = CHECKIN_REWARDS[nextStreak - 1]
+
+    const transaction: Transaction = {
+      id: `checkin-${today}`,
+      title: `Điểm danh ngày ${nextStreak}`,
+      subtitle: 'Điểm danh hàng ngày • Demo',
+      amount: reward,
+      createdAt: 'Vừa xong',
+      status: 'done',
+    }
+
+    setState((current) => ({
+      ...current,
+      balance: current.balance + reward,
+      totalEarned: current.totalEarned + reward,
+      lastCheckInDate: today,
+      checkInStreak: nextStreak,
+      transactions: [transaction, ...current.transactions],
+    }))
+    setToast(`Điểm danh thành công +${compactMoney(reward)}`)
+  }
+
+  const inviteLink = `${INVITE_BASE_URL}?ref=${encodeURIComponent(state.userCode)}`
+
+  const copyInviteLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      setToast('Đã sao chép link giới thiệu')
+    } catch {
+      setToast(inviteLink)
+    }
+  }
+
+  const shareInvite = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Adcash',
+          text: `Tham gia Adcash bằng mã ${state.userCode}`,
+          url: inviteLink,
+        })
+        return
+      } catch {
+        // User may cancel native share sheet.
+      }
+    }
+    await copyInviteLink()
   }
 
   const submitWithdrawal = () => {
@@ -335,6 +435,7 @@ export default function App() {
               completedCount={completedCount}
               progress={progress}
               availableTasks={availableTasks}
+              checkedInToday={checkedInToday}
               onViewChange={setView}
               onStartTask={startTask}
             />
@@ -342,6 +443,23 @@ export default function App() {
 
           {view === 'earn' && (
             <EarnView state={state} onStartTask={startTask} />
+          )}
+
+          {view === 'checkin' && (
+            <CheckInView
+              state={state}
+              checkedInToday={checkedInToday}
+              onClaim={claimDailyCheckIn}
+            />
+          )}
+
+          {view === 'referral' && (
+            <ReferralView
+              state={state}
+              inviteLink={inviteLink}
+              onCopy={copyInviteLink}
+              onShare={shareInvite}
+            />
           )}
 
           {view === 'wallet' && (
@@ -368,8 +486,16 @@ export default function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Điều hướng di động">
-        {navItems.map((item) => {
+        {mobileNavItems.map((item) => {
           const Icon = item.icon
+          const mobileLabel =
+            item.id === 'earn'
+              ? 'Kiếm'
+              : item.id === 'checkin'
+                ? 'Điểm danh'
+                : item.id === 'referral'
+                  ? 'Giới thiệu'
+                  : item.label
           return (
             <button
               key={item.id}
@@ -377,7 +503,7 @@ export default function App() {
               onClick={() => setView(item.id)}
             >
               <Icon size={21} />
-              <span>{item.label === 'Kiếm thưởng' ? 'Kiếm' : item.label}</span>
+              <span>{mobileLabel}</span>
             </button>
           )
         })}
@@ -414,6 +540,7 @@ function HomeView({
   completedCount,
   progress,
   availableTasks,
+  checkedInToday,
   onViewChange,
   onStartTask,
 }: {
@@ -421,6 +548,7 @@ function HomeView({
   completedCount: number
   progress: number
   availableTasks: TaskItem[]
+  checkedInToday: boolean
   onViewChange: (view: View) => void
   onStartTask: (task: TaskItem) => void
 }) {
@@ -430,7 +558,7 @@ function HomeView({
         <div className="hero-copy">
           <span className="hero-label"><Sparkles size={15} /> Số dư khả dụng</span>
           <div className="balance">{money.format(state.balance)}</div>
-          <p>Hoàn thành nhiệm vụ từ đối tác, tích thưởng và gửi yêu cầu rút khi đủ điều kiện.</p>
+          <p>Hoàn thành nhiệm vụ, điểm danh mỗi ngày và giới thiệu bạn bè để tích thưởng.</p>
           <div className="hero-actions">
             <button className="primary-button" onClick={() => onViewChange('earn')}>
               Kiếm thêm ngay <ChevronRight size={18} />
@@ -449,8 +577,33 @@ function HomeView({
 
       <section className="stats-grid">
         <StatCard icon={Trophy} label="Tổng đã kiếm" value={compactMoney(state.totalEarned)} detail="Dữ liệu demo" />
-        <StatCard icon={ClipboardCheck} label="Nhiệm vụ hôm nay" value={`${completedCount}/${tasks.length}`} detail={`${progress}% hoàn thành`} />
-        <StatCard icon={BarChart3} label="Mức rút tối thiểu" value="50.000đ" detail="MoMo / Ngân hàng" />
+        <StatCard icon={CalendarDays} label="Chuỗi điểm danh" value={`${state.checkInStreak} ngày`} detail={checkedInToday ? 'Đã điểm danh hôm nay' : 'Chưa điểm danh hôm nay'} />
+        <StatCard icon={Users} label="Bạn bè đã mời" value={`${state.referralCount}`} detail={`+${compactMoney(REFERRAL_REWARD)}/người hợp lệ`} />
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Thưởng nhanh</span>
+            <h2>Điểm danh & giới thiệu</h2>
+          </div>
+        </div>
+        <div className="task-list">
+          <FeatureRow
+            icon={CalendarDays}
+            title="Điểm danh hàng ngày"
+            description={checkedInToday ? 'Hôm nay đã nhận thưởng' : 'Nhận thưởng tăng dần trong chuỗi 7 ngày'}
+            value={checkedInToday ? 'Đã nhận' : `+${compactMoney(CHECKIN_REWARDS[Math.min(state.checkInStreak, 6)])}`}
+            onOpen={() => onViewChange('checkin')}
+          />
+          <FeatureRow
+            icon={Users}
+            title="Giới thiệu bạn bè"
+            description="Chia sẻ mã hoặc link mời của bạn"
+            value={`+${compactMoney(REFERRAL_REWARD)}`}
+            onOpen={() => onViewChange('referral')}
+          />
+        </div>
       </section>
 
       <section className="section-card daily-card">
@@ -486,10 +639,39 @@ function HomeView({
       <section className="safe-note">
         <LockKeyhole size={22} />
         <div>
-          <strong>Không cộng tiền từ quảng cáo AdMob thông thường</strong>
-          <p>Bản production chỉ quy đổi phần thưởng từ nguồn/đối tác cho phép incentivized rewards và đã được server xác nhận.</p>
+          <strong>Bản hiện tại vẫn là demo</strong>
+          <p>Điểm danh đang lưu trên thiết bị. Giới thiệu bạn bè cần backend xác nhận người dùng hợp lệ trước khi production cộng tiền thật.</p>
         </div>
       </section>
+    </div>
+  )
+}
+
+function FeatureRow({
+  icon: Icon,
+  title,
+  description,
+  value,
+  onOpen,
+}: {
+  icon: LucideIcon
+  title: string
+  description: string
+  value: string
+  onOpen: () => void
+}) {
+  return (
+    <div className="task-row">
+      <div className="task-icon"><Icon size={22} /></div>
+      <div className="task-row-copy">
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+      <div className="task-row-reward">
+        <strong>{value}</strong>
+        <span>thưởng</span>
+      </div>
+      <button className="round-arrow" onClick={onOpen}><ChevronRight size={18} /></button>
     </div>
   )
 }
@@ -503,14 +685,14 @@ function EarnView({ state, onStartTask }: { state: AppState; onStartTask: (task:
           <h2>Chọn nhiệm vụ phù hợp</h2>
           <p>Thưởng hiển thị dưới đây là dữ liệu mô phỏng để kiểm thử giao diện và luồng ứng dụng.</p>
         </div>
-        <div className="earn-badge"><Gift size={26} /> +6.450đ</div>
+        <div className="earn-badge"><Gift size={26} /> +6.300đ</div>
       </section>
 
       <section className="policy-banner">
         <Info size={20} />
         <div>
           <strong>Đang ở chế độ demo</strong>
-          <span>Khi nối production, client không được tự cộng số dư. Backend nhận postback hợp lệ từ đối tác rồi mới ghi giao dịch.</span>
+          <span>Khi nối production, client không được tự cộng số dư. Backend phải xác nhận nguồn thưởng trước khi ghi giao dịch.</span>
         </div>
       </section>
 
@@ -540,6 +722,149 @@ function EarnView({ state, onStartTask }: { state: AppState; onStartTask: (task:
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function CheckInView({
+  state,
+  checkedInToday,
+  onClaim,
+}: {
+  state: AppState
+  checkedInToday: boolean
+  onClaim: () => void
+}) {
+  const nextDay = checkedInToday ? state.checkInStreak : Math.min(7, state.checkInStreak + 1)
+  const nextReward = CHECKIN_REWARDS[Math.max(0, nextDay - 1)]
+
+  return (
+    <div className="page-stack">
+      <section className="earn-banner">
+        <div>
+          <span className="eyebrow">Điểm danh hàng ngày</span>
+          <h2>Giữ chuỗi để nhận thưởng cao hơn</h2>
+          <p>Mỗi ngày chỉ điểm danh một lần. Chuỗi 7 ngày có mức thưởng tăng dần và ngày thứ 7 nhận 1.000đ trong bản demo.</p>
+        </div>
+        <div className="earn-badge"><CalendarDays size={26} /> {state.checkInStreak} ngày</div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Chuỗi 7 ngày</span>
+            <h2>Lịch thưởng</h2>
+          </div>
+          <span className="count-chip">{checkedInToday ? 'Đã điểm danh' : 'Có thể nhận'}</span>
+        </div>
+
+        <div className="task-grid">
+          {CHECKIN_REWARDS.map((reward, index) => {
+            const day = index + 1
+            const completed = day <= state.checkInStreak
+            const current = day === nextDay && !checkedInToday
+            return (
+              <article key={day} className={`task-card ${current ? 'featured' : ''} ${completed ? 'done' : ''}`}>
+                <div className="task-card-top">
+                  <div className="task-icon">{completed ? <CheckCircle2 size={24} /> : <CalendarDays size={24} />}</div>
+                  <span className="category-chip">Ngày {day}</span>
+                </div>
+                <h3>{completed ? 'Đã nhận' : current ? 'Hôm nay' : 'Chưa mở'}</h3>
+                <p>{day === 7 ? 'Mốc thưởng lớn cuối chuỗi.' : 'Duy trì điểm danh liên tiếp để mở mốc này.'}</p>
+                <div className="task-reward-row">
+                  <div>
+                    <span>Phần thưởng</span>
+                    <strong>+{compactMoney(reward)}</strong>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading compact-heading">
+          <div>
+            <span className="eyebrow">Hôm nay</span>
+            <h2>{checkedInToday ? 'Đã nhận thưởng' : `Nhận +${compactMoney(nextReward)}`}</h2>
+          </div>
+        </div>
+        <button className="primary-button wide" disabled={checkedInToday} onClick={onClaim}>
+          {checkedInToday ? <><CheckCircle2 size={18} /> Đã điểm danh hôm nay</> : <><CalendarDays size={18} /> Điểm danh ngay</>}
+        </button>
+      </section>
+    </div>
+  )
+}
+
+function ReferralView({
+  state,
+  inviteLink,
+  onCopy,
+  onShare,
+}: {
+  state: AppState
+  inviteLink: string
+  onCopy: () => void
+  onShare: () => void
+}) {
+  return (
+    <div className="page-stack">
+      <section className="earn-banner">
+        <div>
+          <span className="eyebrow">Giới thiệu bạn bè</span>
+          <h2>Mời bạn bè tham gia Adcash</h2>
+          <p>Chia sẻ mã hoặc link mời. Bản production chỉ cộng thưởng sau khi backend xác nhận người được giới thiệu đủ điều kiện.</p>
+        </div>
+        <div className="earn-badge"><Users size={26} /> +{compactMoney(REFERRAL_REWARD)}</div>
+      </section>
+
+      <section className="stats-grid">
+        <StatCard icon={Users} label="Bạn bè đã mời" value={`${state.referralCount}`} detail="Đã xác nhận" />
+        <StatCard icon={Gift} label="Thưởng mỗi người" value={compactMoney(REFERRAL_REWARD)} detail="Khi đủ điều kiện" />
+        <StatCard icon={Trophy} label="Thu nhập giới thiệu" value={compactMoney(state.referralCount * REFERRAL_REWARD)} detail="Dữ liệu demo" />
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Mã của bạn</span>
+            <h2>{state.userCode}</h2>
+          </div>
+          <button className="secondary-button" onClick={onCopy}><Copy size={17} /> Sao chép link</button>
+        </div>
+
+        <label className="field-label" htmlFor="invite-link">Link giới thiệu</label>
+        <input id="invite-link" className="input" value={inviteLink} readOnly />
+
+        <div className="hero-actions">
+          <button className="primary-button" onClick={onShare}><Share2 size={18} /> Chia sẻ ngay</button>
+          <button className="secondary-button" onClick={onCopy}><Copy size={18} /> Sao chép</button>
+        </div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Cách nhận thưởng</span>
+            <h2>3 bước giới thiệu</h2>
+          </div>
+        </div>
+        <div className="task-list">
+          <FeatureRow icon={Share2} title="1. Chia sẻ link" description="Gửi link hoặc mã giới thiệu cho bạn bè." value="Bước 1" onOpen={onCopy} />
+          <FeatureRow icon={Users} title="2. Bạn bè tham gia" description="Người mới mở app qua link của bạn." value="Bước 2" onOpen={() => {}} />
+          <FeatureRow icon={BadgeCheck} title="3. Xác nhận hợp lệ" description="Production cần backend chống tự mời và tài khoản trùng." value={`+${compactMoney(REFERRAL_REWARD)}`} onOpen={() => {}} />
+        </div>
+      </section>
+
+      <section className="policy-banner">
+        <Info size={20} />
+        <div>
+          <strong>Chưa tự cộng thưởng giới thiệu trong bản demo</strong>
+          <span>Không có nút tự tăng số người mời. Khi làm production cần backend ghi người giới thiệu, người được giới thiệu và chỉ cộng một lần sau điều kiện hợp lệ.</span>
+        </div>
+      </section>
     </div>
   )
 }
@@ -697,21 +1022,21 @@ function ProfileView({ state, onCopy, onReset }: { state: AppState; onCopy: () =
 
       <section className="profile-stats">
         <StatCard icon={WalletCards} label="Số dư" value={compactMoney(state.balance)} detail="Khả dụng" />
-        <StatCard icon={Trophy} label="Tổng thu nhập" value={compactMoney(state.totalEarned)} detail="Dữ liệu demo" />
-        <StatCard icon={ClipboardCheck} label="Đã hoàn thành" value={`${state.completedTaskIds.length}`} detail="Nhiệm vụ" />
+        <StatCard icon={CalendarDays} label="Chuỗi điểm danh" value={`${state.checkInStreak} ngày`} detail="Hàng ngày" />
+        <StatCard icon={Users} label="Bạn bè đã mời" value={`${state.referralCount}`} detail="Giới thiệu" />
       </section>
 
       <section className="section-card settings-card">
-        <div className="setting-row"><div className="setting-icon"><ShieldCheck size={20} /></div><div><strong>Bảo mật tài khoản</strong><span>Auth + RLS sẽ được bật khi nối Supabase production.</span></div><ChevronRight size={18} /></div>
+        <div className="setting-row"><div className="setting-icon"><ShieldCheck size={20} /></div><div><strong>Bảo mật tài khoản</strong><span>Production cần backend xác minh số dư và phần thưởng.</span></div><ChevronRight size={18} /></div>
         <div className="setting-row"><div className="setting-icon"><Landmark size={20} /></div><div><strong>Phương thức thanh toán</strong><span>MoMo và tài khoản ngân hàng.</span></div><ChevronRight size={18} /></div>
-        <div className="setting-row"><div className="setting-icon"><Bell size={20} /></div><div><strong>Thông báo</strong><span>Trạng thái nhiệm vụ và rút tiền.</span></div><ChevronRight size={18} /></div>
+        <div className="setting-row"><div className="setting-icon"><Bell size={20} /></div><div><strong>Thông báo</strong><span>Trạng thái nhiệm vụ, điểm danh và rút tiền.</span></div><ChevronRight size={18} /></div>
       </section>
 
       <section className="section-card developer-card">
         <div>
           <span className="eyebrow">Dành cho phát triển</span>
           <h3>Đặt lại dữ liệu kiểm thử</h3>
-          <p>Xóa số dư, giao dịch và nhiệm vụ đã làm trong localStorage rồi tạo lại dữ liệu demo mặc định.</p>
+          <p>Xóa số dư, giao dịch, điểm danh và nhiệm vụ đã làm trong localStorage rồi tạo lại dữ liệu demo mặc định.</p>
         </div>
         <button className="secondary-button danger" onClick={onReset}><RotateCcw size={17} /> Đặt lại demo</button>
       </section>
@@ -731,11 +1056,11 @@ function TaskModal({ task, seconds, onClose, onClaim }: { task: TaskItem; second
         <h2>{task.title}</h2>
         <p>{task.description}</p>
         <div className="modal-reward"><span>Phần thưởng</span><strong>+{compactMoney(task.reward)}</strong></div>
-        <div className="countdown-ring" style={{ '--progress': `${progress}%` } as React.CSSProperties}>
+        <div className="countdown-ring" style={{ '--progress': `${progress}%` } as CSSProperties}>
           <div>{seconds > 0 ? <><strong>{seconds}</strong><span>giây</span></> : <CheckCircle2 size={36} />}</div>
         </div>
         <p className="modal-note">
-          {seconds > 0 ? 'Đang mô phỏng thời gian hoàn thành…' : 'Demo đã hoàn thành. Production phải chờ xác nhận server/postback trước khi cộng tiền.'}
+          {seconds > 0 ? 'Đang mô phỏng thời gian hoàn thành…' : 'Demo đã hoàn thành. Production phải chờ xác nhận server trước khi cộng tiền.'}
         </p>
         <button className="primary-button wide" disabled={seconds > 0} onClick={onClaim}>
           {seconds > 0 ? `Chờ ${seconds} giây` : `Nhận ${compactMoney(task.reward)}`}
