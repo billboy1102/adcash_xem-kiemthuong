@@ -127,6 +127,8 @@ const tasks: TaskItem[] = [
   },
 ]
 
+const completableTasks = tasks.filter((task) => task.id !== 'referral-task')
+
 const navItems: Array<{ id: View; label: string; icon: LucideIcon }> = [
   { id: 'home', label: 'Trang chủ', icon: Home },
   { id: 'earn', label: 'Kiếm thưởng', icon: Sparkles },
@@ -165,11 +167,21 @@ function loadState(): AppState {
     const saved = localStorage.getItem('adcash-demo-state-v1')
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<AppState>
+      const completedTaskIds = (parsed.completedTaskIds ?? []).filter((id) =>
+        tasks.some((task) => task.id === id),
+      )
+      const transactions = (parsed.transactions ?? [...initialTransactions]).filter((transaction) =>
+        transaction.id !== 'survey-demo' &&
+        !transaction.id.startsWith('quick-survey-') &&
+        !transaction.id.startsWith('mini-poll-') &&
+        !transaction.id.startsWith('app-offer-'),
+      )
+
       return {
         ...defaultState,
         ...parsed,
-        completedTaskIds: parsed.completedTaskIds ?? [],
-        transactions: parsed.transactions ?? [...initialTransactions],
+        completedTaskIds,
+        transactions,
         userCode: parsed.userCode || defaultState.userCode,
         lastCheckInDate: parsed.lastCheckInDate ?? '',
         checkInStreak: parsed.checkInStreak ?? 0,
@@ -208,7 +220,6 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [activeTask, seconds])
 
-  const completableTasks = tasks.filter((task) => task.id !== 'referral-task')
   const completedCount = completableTasks.filter((task) => state.completedTaskIds.includes(task.id)).length
   const progress = completableTasks.length
     ? Math.min(100, Math.round((completedCount / completableTasks.length) * 100))
