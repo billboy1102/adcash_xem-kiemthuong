@@ -7,8 +7,27 @@
   display: none !important;
 }
 
-/* Keep the existing top action button sizing, but show a notification bell
-   instead of the refresh glyph on the user dashboard. */
+/* Show a notification bell instead of the refresh glyph. */
+.topbar .top-actions .icon-button:first-child {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  padding: 6px !important;
+}
+
+.topbar .top-actions .icon-button:first-child:hover,
+.topbar .top-actions .icon-button:first-child:active,
+.topbar .top-actions .icon-button:first-child:focus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 .topbar .top-actions .icon-button:first-child svg {
   display: none !important;
 }
