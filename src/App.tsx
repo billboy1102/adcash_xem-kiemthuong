@@ -9,22 +9,20 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
-  ClipboardCheck,
   Clock3,
   Copy,
-  Gift,
+  Eye,
   Home,
   Info,
   Landmark,
   LockKeyhole,
-  MessageSquareText,
   PlayCircle,
   RotateCcw,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   Trophy,
   UserRound,
+  Video,
   WalletCards,
   X,
   Zap,
@@ -42,13 +40,13 @@ type Transaction = {
   status: TransactionStatus
 }
 
-type TaskItem = {
+type AdItem = {
   id: string
   title: string
   description: string
   reward: number
   duration: string
-  category: string
+  sponsor: string
   icon: LucideIcon
   featured?: boolean
 }
@@ -56,7 +54,7 @@ type TaskItem = {
 type AppState = {
   balance: number
   totalEarned: number
-  completedTaskIds: string[]
+  watchedAds: number
   transactions: Transaction[]
   userCode: string
 }
@@ -71,91 +69,73 @@ const compactMoney = (value: number) => `${new Intl.NumberFormat('vi-VN').format
 
 const initialTransactions: Transaction[] = [
   {
-    id: 'welcome',
-    title: 'Thưởng người dùng mới',
-    subtitle: 'Phần thưởng demo khởi động',
-    amount: 35_000,
+    id: 'ad-demo-3',
+    title: 'Xem quảng cáo tài trợ',
+    subtitle: 'Sponsor C • Đã xem hoàn tất • Demo',
+    amount: 500,
     createdAt: 'Hôm nay, 09:15',
     status: 'done',
   },
   {
-    id: 'survey-demo',
-    title: 'Khảo sát nhanh',
-    subtitle: 'Đối tác khảo sát • Demo',
-    amount: 1_200,
+    id: 'ad-demo-2',
+    title: 'Xem quảng cáo video',
+    subtitle: 'Sponsor B • Đã xem hoàn tất • Demo',
+    amount: 350,
     createdAt: 'Hôm qua, 21:42',
     status: 'done',
   },
   {
-    id: 'video-demo',
-    title: 'Video tài trợ',
-    subtitle: 'Đối tác thưởng • Demo',
-    amount: 350,
+    id: 'ad-demo-1',
+    title: 'Xem quảng cáo ngắn',
+    subtitle: 'Sponsor A • Đã xem hoàn tất • Demo',
+    amount: 250,
     createdAt: 'Hôm qua, 20:08',
     status: 'done',
   },
 ]
 
 const defaultState: AppState = {
-  balance: 62_750,
-  totalEarned: 89_950,
-  completedTaskIds: [],
+  balance: 1_100,
+  totalEarned: 1_100,
+  watchedAds: 3,
   transactions: initialTransactions,
   userCode: `ADC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
 }
 
-const tasks: TaskItem[] = [
+const ads: AdItem[] = [
   {
-    id: 'sponsor-video',
-    title: 'Xem video tài trợ',
-    description: 'Xem trọn nội dung từ đối tác có chương trình thưởng.',
+    id: 'short-ad',
+    title: 'Xem quảng cáo ngắn',
+    description: 'Xem hết quảng cáo ngắn để hệ thống ghi nhận lượt xem hợp lệ.',
+    reward: 250,
+    duration: '15–30 giây',
+    sponsor: 'Sponsor A',
+    icon: PlayCircle,
+  },
+  {
+    id: 'video-ad',
+    title: 'Xem quảng cáo video',
+    description: 'Xem trọn video quảng cáo từ đối tác và nhận thưởng sau khi được xác nhận.',
     reward: 350,
     duration: '30–45 giây',
-    category: 'Video',
-    icon: PlayCircle,
+    sponsor: 'Sponsor B',
+    icon: Video,
     featured: true,
   },
   {
-    id: 'quick-survey',
-    title: 'Khảo sát nhanh 2 phút',
-    description: 'Trả lời một khảo sát ngắn phù hợp với hồ sơ của bạn.',
-    reward: 1_200,
-    duration: '2–3 phút',
-    category: 'Khảo sát',
-    icon: MessageSquareText,
-  },
-  {
-    id: 'daily-check',
-    title: 'Điểm danh hôm nay',
-    description: 'Mở ứng dụng mỗi ngày để nhận phần thưởng duy trì.',
-    reward: 150,
-    duration: '10 giây',
-    category: 'Hằng ngày',
-    icon: Zap,
-  },
-  {
-    id: 'app-offer',
-    title: 'Trải nghiệm ứng dụng',
-    description: 'Hoàn thành yêu cầu của đối tác và chờ hệ thống xác nhận.',
-    reward: 4_500,
-    duration: '5–10 phút',
-    category: 'Offer',
-    icon: Smartphone,
-  },
-  {
-    id: 'mini-poll',
-    title: 'Bình chọn nhanh',
-    description: 'Chọn câu trả lời bạn yêu thích trong một bình chọn ngắn.',
-    reward: 250,
-    duration: '30 giây',
-    category: 'Bình chọn',
-    icon: ClipboardCheck,
+    id: 'premium-ad',
+    title: 'Xem quảng cáo tài trợ',
+    description: 'Quảng cáo tài trợ có mức thưởng cao hơn khi hoàn thành toàn bộ thời lượng.',
+    reward: 500,
+    duration: '45–60 giây',
+    sponsor: 'Sponsor C',
+    icon: Eye,
   },
 ]
 
 const navItems: Array<{ id: View; label: string; icon: LucideIcon }> = [
   { id: 'home', label: 'Trang chủ', icon: Home },
-  { id: 'earn', label: 'Kiếm thưởng', icon: Sparkles },
+  { id: 'earn', label: 'Xem quảng cáo', icon: PlayCircle },
   { id: 'wallet', label: 'Ví', icon: WalletCards },
   { id: 'withdraw', label: 'Rút tiền', icon: Landmark },
   { id: 'profile', label: 'Hồ sơ', icon: UserRound },
@@ -163,7 +143,7 @@ const navItems: Array<{ id: View; label: string; icon: LucideIcon }> = [
 
 function loadState(): AppState {
   try {
-    const saved = localStorage.getItem('adcash-demo-state-v1')
+    const saved = localStorage.getItem('adcash-ads-only-state-v2')
     if (saved) return JSON.parse(saved) as AppState
   } catch {
     // Ignore corrupted local demo state.
@@ -174,7 +154,7 @@ function loadState(): AppState {
 export default function App() {
   const [view, setView] = useState<View>('home')
   const [state, setState] = useState<AppState>(loadState)
-  const [activeTask, setActiveTask] = useState<TaskItem | null>(null)
+  const [activeAd, setActiveAd] = useState<AdItem | null>(null)
   const [seconds, setSeconds] = useState(0)
   const [toast, setToast] = useState('')
   const [withdrawMethod, setWithdrawMethod] = useState<'momo' | 'bank'>('momo')
@@ -182,7 +162,7 @@ export default function App() {
   const [withdrawAmount, setWithdrawAmount] = useState('50000')
 
   useEffect(() => {
-    localStorage.setItem('adcash-demo-state-v1', JSON.stringify(state))
+    localStorage.setItem('adcash-ads-only-state-v2', JSON.stringify(state))
   }, [state])
 
   useEffect(() => {
@@ -192,46 +172,44 @@ export default function App() {
   }, [toast])
 
   useEffect(() => {
-    if (!activeTask || seconds <= 0) return
+    if (!activeAd || seconds <= 0) return
     const timer = window.setTimeout(() => setSeconds((value) => value - 1), 1000)
     return () => window.clearTimeout(timer)
-  }, [activeTask, seconds])
+  }, [activeAd, seconds])
 
-  const completedCount = state.completedTaskIds.length
-  const progress = Math.min(100, Math.round((completedCount / tasks.length) * 100))
-  const availableTasks = tasks.filter((task) => !state.completedTaskIds.includes(task.id))
+  const dailyGoal = 10
+  const progress = Math.min(100, Math.round((state.watchedAds / dailyGoal) * 100))
 
   const title = useMemo(() => {
     return navItems.find((item) => item.id === view)?.label ?? 'Adcash'
   }, [view])
 
-  const startTask = (task: TaskItem) => {
-    if (state.completedTaskIds.includes(task.id)) return
-    setActiveTask(task)
+  const startAd = (ad: AdItem) => {
+    setActiveAd(ad)
     setSeconds(6)
   }
 
-  const claimTask = () => {
-    if (!activeTask || seconds > 0) return
-    const task = activeTask
+  const claimAd = () => {
+    if (!activeAd || seconds > 0) return
+    const ad = activeAd
     const transaction: Transaction = {
-      id: `${task.id}-${Date.now()}`,
-      title: task.title,
-      subtitle: `${task.category} • Đã xác nhận demo`,
-      amount: task.reward,
+      id: `${ad.id}-${Date.now()}`,
+      title: ad.title,
+      subtitle: `${ad.sponsor} • Đã xem hoàn tất • Demo`,
+      amount: ad.reward,
       createdAt: 'Vừa xong',
       status: 'done',
     }
 
     setState((current) => ({
       ...current,
-      balance: current.balance + task.reward,
-      totalEarned: current.totalEarned + task.reward,
-      completedTaskIds: [...current.completedTaskIds, task.id],
+      balance: current.balance + ad.reward,
+      totalEarned: current.totalEarned + ad.reward,
+      watchedAds: current.watchedAds + 1,
       transactions: [transaction, ...current.transactions],
     }))
-    setActiveTask(null)
-    setToast(`Đã cộng ${compactMoney(task.reward)} vào ví demo`)
+    setActiveAd(null)
+    setToast(`Đã cộng ${compactMoney(ad.reward)} từ lượt xem quảng cáo demo`)
   }
 
   const submitWithdrawal = () => {
@@ -269,13 +247,13 @@ export default function App() {
   }
 
   const resetDemo = () => {
-    localStorage.removeItem('adcash-demo-state-v1')
+    localStorage.removeItem('adcash-ads-only-state-v2')
     setState({
       ...defaultState,
       userCode: `ADC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       transactions: [...initialTransactions],
     })
-    setToast('Đã đặt lại dữ liệu demo')
+    setToast('Đã đặt lại dữ liệu xem quảng cáo demo')
   }
 
   const copyCode = async () => {
@@ -310,8 +288,8 @@ export default function App() {
         <div className="sidebar-security">
           <ShieldCheck size={22} />
           <div>
-            <strong>Giao dịch an toàn</strong>
-            <span>Tiền thật sẽ chỉ được cộng sau xác nhận từ server.</span>
+            <strong>Chỉ thưởng khi xem quảng cáo</strong>
+            <span>Không có điểm danh, khảo sát, cài app hay nguồn thưởng khác.</span>
           </div>
         </div>
       </aside>
@@ -332,16 +310,15 @@ export default function App() {
           {view === 'home' && (
             <HomeView
               state={state}
-              completedCount={completedCount}
+              dailyGoal={dailyGoal}
               progress={progress}
-              availableTasks={availableTasks}
               onViewChange={setView}
-              onStartTask={startTask}
+              onStartAd={startAd}
             />
           )}
 
           {view === 'earn' && (
-            <EarnView state={state} onStartTask={startTask} />
+            <AdsView onStartAd={startAd} />
           )}
 
           {view === 'wallet' && (
@@ -377,18 +354,18 @@ export default function App() {
               onClick={() => setView(item.id)}
             >
               <Icon size={21} />
-              <span>{item.label === 'Kiếm thưởng' ? 'Kiếm' : item.label}</span>
+              <span>{item.id === 'earn' ? 'Quảng cáo' : item.label}</span>
             </button>
           )
         })}
       </nav>
 
-      {activeTask && (
-        <TaskModal
-          task={activeTask}
+      {activeAd && (
+        <AdModal
+          ad={activeAd}
           seconds={seconds}
-          onClose={() => setActiveTask(null)}
-          onClaim={claimTask}
+          onClose={() => setActiveAd(null)}
+          onClaim={claimAd}
         />
       )}
 
@@ -411,29 +388,27 @@ function Brand() {
 
 function HomeView({
   state,
-  completedCount,
+  dailyGoal,
   progress,
-  availableTasks,
   onViewChange,
-  onStartTask,
+  onStartAd,
 }: {
   state: AppState
-  completedCount: number
+  dailyGoal: number
   progress: number
-  availableTasks: TaskItem[]
   onViewChange: (view: View) => void
-  onStartTask: (task: TaskItem) => void
+  onStartAd: (ad: AdItem) => void
 }) {
   return (
     <div className="page-stack">
       <section className="hero-card">
         <div className="hero-copy">
-          <span className="hero-label"><Sparkles size={15} /> Số dư khả dụng</span>
+          <span className="hero-label"><PlayCircle size={15} /> Xem quảng cáo & nhận thưởng</span>
           <div className="balance">{money.format(state.balance)}</div>
-          <p>Hoàn thành nhiệm vụ từ đối tác, tích thưởng và gửi yêu cầu rút khi đủ điều kiện.</p>
+          <p>Nguồn thu nhập duy nhất trong Adcash là xem quảng cáo. Xem hết quảng cáo hợp lệ để nhận tiền thưởng.</p>
           <div className="hero-actions">
             <button className="primary-button" onClick={() => onViewChange('earn')}>
-              Kiếm thêm ngay <ChevronRight size={18} />
+              Xem quảng cáo ngay <ChevronRight size={18} />
             </button>
             <button className="secondary-button" onClick={() => onViewChange('withdraw')}>
               Rút tiền
@@ -441,44 +416,44 @@ function HomeView({
           </div>
         </div>
         <div className="hero-orb" aria-hidden="true">
-          <div className="coin coin-one">₫</div>
-          <div className="coin coin-two">+</div>
+          <div className="coin coin-one">▶</div>
+          <div className="coin coin-two">₫</div>
           <div className="hero-center"><Banknote size={56} /></div>
         </div>
       </section>
 
       <section className="stats-grid">
-        <StatCard icon={Trophy} label="Tổng đã kiếm" value={compactMoney(state.totalEarned)} detail="Dữ liệu demo" />
-        <StatCard icon={ClipboardCheck} label="Nhiệm vụ hôm nay" value={`${completedCount}/${tasks.length}`} detail={`${progress}% hoàn thành`} />
+        <StatCard icon={Trophy} label="Tổng đã kiếm" value={compactMoney(state.totalEarned)} detail="100% từ quảng cáo" />
+        <StatCard icon={Eye} label="Quảng cáo đã xem" value={`${state.watchedAds}`} detail="Lượt xem demo" />
         <StatCard icon={BarChart3} label="Mức rút tối thiểu" value="50.000đ" detail="MoMo / Ngân hàng" />
       </section>
 
       <section className="section-card daily-card">
         <div className="section-heading compact-heading">
           <div>
-            <span className="eyebrow">Mục tiêu hôm nay</span>
-            <h2>Hoàn thành nhiệm vụ</h2>
+            <span className="eyebrow">Mục tiêu xem quảng cáo</span>
+            <h2>{dailyGoal} quảng cáo</h2>
           </div>
           <span className="progress-value">{progress}%</span>
         </div>
         <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         <div className="daily-footer">
-          <span>{completedCount} nhiệm vụ đã xong</span>
-          <span>{Math.max(0, tasks.length - completedCount)} nhiệm vụ còn lại</span>
+          <span>{state.watchedAds} lượt đã xem</span>
+          <span>{Math.max(0, dailyGoal - state.watchedAds)} lượt để đạt mục tiêu</span>
         </div>
       </section>
 
       <section className="section-card">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">Gợi ý cho bạn</span>
-            <h2>Nhiệm vụ thưởng nổi bật</h2>
+            <span className="eyebrow">Quảng cáo đang có</span>
+            <h2>Xem để kiếm tiền</h2>
           </div>
           <button className="text-button" onClick={() => onViewChange('earn')}>Xem tất cả <ChevronRight size={16} /></button>
         </div>
         <div className="task-list">
-          {(availableTasks.length ? availableTasks : tasks).slice(0, 3).map((task) => (
-            <TaskRow key={task.id} task={task} completed={state.completedTaskIds.includes(task.id)} onStart={() => onStartTask(task)} />
+          {ads.map((ad) => (
+            <AdRow key={ad.id} ad={ad} onStart={() => onStartAd(ad)} />
           ))}
         </div>
       </section>
@@ -486,54 +461,53 @@ function HomeView({
       <section className="safe-note">
         <LockKeyhole size={22} />
         <div>
-          <strong>Không cộng tiền từ quảng cáo AdMob thông thường</strong>
-          <p>Bản production chỉ quy đổi phần thưởng từ nguồn/đối tác cho phép incentivized rewards và đã được server xác nhận.</p>
+          <strong>Không có cách kiếm tiền nào khác</strong>
+          <p>Không thưởng điểm danh, khảo sát, giới thiệu bạn bè, tải ứng dụng hay thao tác khác. Chỉ lượt xem quảng cáo được xác nhận mới tạo thu nhập.</p>
         </div>
       </section>
     </div>
   )
 }
 
-function EarnView({ state, onStartTask }: { state: AppState; onStartTask: (task: TaskItem) => void }) {
+function AdsView({ onStartAd }: { onStartAd: (ad: AdItem) => void }) {
   return (
     <div className="page-stack">
       <section className="earn-banner">
         <div>
-          <span className="eyebrow">Cơ hội hôm nay</span>
-          <h2>Chọn nhiệm vụ phù hợp</h2>
-          <p>Thưởng hiển thị dưới đây là dữ liệu mô phỏng để kiểm thử giao diện và luồng ứng dụng.</p>
+          <span className="eyebrow">Kiếm tiền bằng quảng cáo</span>
+          <h2>Chọn quảng cáo để xem</h2>
+          <p>Xem trọn quảng cáo. Khi hệ thống xác nhận lượt xem hợp lệ, phần thưởng mới được cộng vào số dư.</p>
         </div>
-        <div className="earn-badge"><Gift size={26} /> +6.450đ</div>
+        <div className="earn-badge"><PlayCircle size={26} /> Chỉ quảng cáo</div>
       </section>
 
       <section className="policy-banner">
         <Info size={20} />
         <div>
           <strong>Đang ở chế độ demo</strong>
-          <span>Khi nối production, client không được tự cộng số dư. Backend nhận postback hợp lệ từ đối tác rồi mới ghi giao dịch.</span>
+          <span>Thời gian xem đang được rút ngắn để kiểm thử. Bản production phải nhận xác nhận hợp lệ từ mạng quảng cáo/server trước khi cộng tiền.</span>
         </div>
       </section>
 
       <div className="task-grid">
-        {tasks.map((task) => {
-          const done = state.completedTaskIds.includes(task.id)
-          const Icon = task.icon
+        {ads.map((ad) => {
+          const Icon = ad.icon
           return (
-            <article key={task.id} className={`task-card ${task.featured ? 'featured' : ''} ${done ? 'done' : ''}`}>
+            <article key={ad.id} className={`task-card ${ad.featured ? 'featured' : ''}`}>
               <div className="task-card-top">
                 <div className="task-icon"><Icon size={24} /></div>
-                <span className="category-chip">{task.category}</span>
+                <span className="category-chip">Quảng cáo</span>
               </div>
-              <h3>{task.title}</h3>
-              <p>{task.description}</p>
-              <div className="task-meta"><Clock3 size={15} /> {task.duration}</div>
+              <h3>{ad.title}</h3>
+              <p>{ad.description}</p>
+              <div className="task-meta"><Clock3 size={15} /> {ad.duration} • {ad.sponsor}</div>
               <div className="task-reward-row">
                 <div>
-                  <span>Phần thưởng</span>
-                  <strong>+{compactMoney(task.reward)}</strong>
+                  <span>Tiền nhận được</span>
+                  <strong>+{compactMoney(ad.reward)}</strong>
                 </div>
-                <button className={done ? 'complete-button' : 'primary-button small'} disabled={done} onClick={() => onStartTask(task)}>
-                  {done ? <><BadgeCheck size={17} /> Đã xong</> : <>Bắt đầu <ChevronRight size={16} /></>}
+                <button className="primary-button small" onClick={() => onStartAd(ad)}>
+                  Xem ngay <PlayCircle size={16} />
                 </button>
               </div>
             </article>
@@ -551,7 +525,7 @@ function WalletView({ state, onWithdraw }: { state: AppState; onWithdraw: () => 
         <div>
           <span>Số dư khả dụng</span>
           <strong>{money.format(state.balance)}</strong>
-          <small>Tổng thu nhập demo: {money.format(state.totalEarned)}</small>
+          <small>Tổng thu nhập từ quảng cáo demo: {money.format(state.totalEarned)}</small>
         </div>
         <button className="light-button" onClick={onWithdraw}><Landmark size={18} /> Rút tiền</button>
       </section>
@@ -568,7 +542,7 @@ function WalletView({ state, onWithdraw }: { state: AppState; onWithdraw: () => 
           {state.transactions.map((transaction) => (
             <div className="transaction-row" key={transaction.id}>
               <div className={`transaction-icon ${transaction.amount < 0 ? 'out' : ''}`}>
-                {transaction.amount < 0 ? <Landmark size={19} /> : <CircleDollarSign size={19} />}
+                {transaction.amount < 0 ? <Landmark size={19} /> : <PlayCircle size={19} />}
               </div>
               <div className="transaction-copy">
                 <strong>{transaction.title}</strong>
@@ -675,8 +649,8 @@ function WithdrawView({
         </div>
         <div className="summary-line"><span>Mức rút tối thiểu</span><strong>50.000đ</strong></div>
         <div className="summary-line"><span>Phí rút tiền</span><strong>0đ</strong></div>
-        <div className="summary-line"><span>Trạng thái</span><strong className="positive">Khả dụng</strong></div>
-        <div className="summary-note"><ShieldCheck size={20} /><span>Production cần admin/backend duyệt trước khi thanh toán.</span></div>
+        <div className="summary-line"><span>Nguồn thu nhập</span><strong className="positive">Quảng cáo</strong></div>
+        <div className="summary-note"><ShieldCheck size={20} /><span>Production cần backend xác minh lượt xem và duyệt thanh toán.</span></div>
       </aside>
     </div>
   )
@@ -697,21 +671,21 @@ function ProfileView({ state, onCopy, onReset }: { state: AppState; onCopy: () =
 
       <section className="profile-stats">
         <StatCard icon={WalletCards} label="Số dư" value={compactMoney(state.balance)} detail="Khả dụng" />
-        <StatCard icon={Trophy} label="Tổng thu nhập" value={compactMoney(state.totalEarned)} detail="Dữ liệu demo" />
-        <StatCard icon={ClipboardCheck} label="Đã hoàn thành" value={`${state.completedTaskIds.length}`} detail="Nhiệm vụ" />
+        <StatCard icon={Trophy} label="Tổng thu nhập" value={compactMoney(state.totalEarned)} detail="Từ quảng cáo" />
+        <StatCard icon={Eye} label="Đã xem" value={`${state.watchedAds}`} detail="Quảng cáo" />
       </section>
 
       <section className="section-card settings-card">
-        <div className="setting-row"><div className="setting-icon"><ShieldCheck size={20} /></div><div><strong>Bảo mật tài khoản</strong><span>Auth + RLS sẽ được bật khi nối Supabase production.</span></div><ChevronRight size={18} /></div>
+        <div className="setting-row"><div className="setting-icon"><ShieldCheck size={20} /></div><div><strong>Bảo mật tài khoản</strong><span>Auth + RLS sẽ được bật khi nối backend production.</span></div><ChevronRight size={18} /></div>
         <div className="setting-row"><div className="setting-icon"><Landmark size={20} /></div><div><strong>Phương thức thanh toán</strong><span>MoMo và tài khoản ngân hàng.</span></div><ChevronRight size={18} /></div>
-        <div className="setting-row"><div className="setting-icon"><Bell size={20} /></div><div><strong>Thông báo</strong><span>Trạng thái nhiệm vụ và rút tiền.</span></div><ChevronRight size={18} /></div>
+        <div className="setting-row"><div className="setting-icon"><Zap size={20} /></div><div><strong>Cách kiếm tiền</strong><span>Chỉ xem quảng cáo hợp lệ để nhận thưởng.</span></div><ChevronRight size={18} /></div>
       </section>
 
       <section className="section-card developer-card">
         <div>
           <span className="eyebrow">Dành cho phát triển</span>
           <h3>Đặt lại dữ liệu kiểm thử</h3>
-          <p>Xóa số dư, giao dịch và nhiệm vụ đã làm trong localStorage rồi tạo lại dữ liệu demo mặc định.</p>
+          <p>Xóa dữ liệu xem quảng cáo và giao dịch trong localStorage rồi tạo lại dữ liệu demo mặc định.</p>
         </div>
         <button className="secondary-button danger" onClick={onReset}><RotateCcw size={17} /> Đặt lại demo</button>
       </section>
@@ -719,47 +693,47 @@ function ProfileView({ state, onCopy, onReset }: { state: AppState; onCopy: () =
   )
 }
 
-function TaskModal({ task, seconds, onClose, onClaim }: { task: TaskItem; seconds: number; onClose: () => void; onClaim: () => void }) {
-  const Icon = task.icon
+function AdModal({ ad, seconds, onClose, onClaim }: { ad: AdItem; seconds: number; onClose: () => void; onClaim: () => void }) {
+  const Icon = ad.icon
   const progress = Math.round(((6 - seconds) / 6) * 100)
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={task.title}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={ad.title}>
       <div className="task-modal">
         <button className="modal-close" onClick={onClose} aria-label="Đóng"><X size={20} /></button>
         <div className="modal-task-icon"><Icon size={30} /></div>
-        <span className="demo-tag">MÔ PHỎNG NHIỆM VỤ</span>
-        <h2>{task.title}</h2>
-        <p>{task.description}</p>
-        <div className="modal-reward"><span>Phần thưởng</span><strong>+{compactMoney(task.reward)}</strong></div>
+        <span className="demo-tag">MÔ PHỎNG QUẢNG CÁO</span>
+        <h2>{ad.title}</h2>
+        <p>{ad.description}</p>
+        <div className="modal-reward"><span>Tiền nhận được</span><strong>+{compactMoney(ad.reward)}</strong></div>
         <div className="countdown-ring" style={{ '--progress': `${progress}%` } as React.CSSProperties}>
           <div>{seconds > 0 ? <><strong>{seconds}</strong><span>giây</span></> : <CheckCircle2 size={36} />}</div>
         </div>
         <p className="modal-note">
-          {seconds > 0 ? 'Đang mô phỏng thời gian hoàn thành…' : 'Demo đã hoàn thành. Production phải chờ xác nhận server/postback trước khi cộng tiền.'}
+          {seconds > 0 ? 'Đang mô phỏng thời gian xem quảng cáo…' : 'Quảng cáo demo đã xem hết. Production phải chờ mạng quảng cáo/server xác nhận trước khi cộng tiền.'}
         </p>
         <button className="primary-button wide" disabled={seconds > 0} onClick={onClaim}>
-          {seconds > 0 ? `Chờ ${seconds} giây` : `Nhận ${compactMoney(task.reward)}`}
+          {seconds > 0 ? `Còn ${seconds} giây` : `Nhận ${compactMoney(ad.reward)}`}
         </button>
       </div>
     </div>
   )
 }
 
-function TaskRow({ task, completed, onStart }: { task: TaskItem; completed: boolean; onStart: () => void }) {
-  const Icon = task.icon
+function AdRow({ ad, onStart }: { ad: AdItem; onStart: () => void }) {
+  const Icon = ad.icon
   return (
     <div className="task-row">
       <div className="task-icon"><Icon size={22} /></div>
       <div className="task-row-copy">
-        <strong>{task.title}</strong>
-        <span><Clock3 size={14} /> {task.duration} • {task.category}</span>
+        <strong>{ad.title}</strong>
+        <span><Clock3 size={14} /> {ad.duration} • {ad.sponsor}</span>
       </div>
       <div className="task-row-reward">
-        <strong>+{compactMoney(task.reward)}</strong>
-        <span>thưởng</span>
+        <strong>+{compactMoney(ad.reward)}</strong>
+        <span>mỗi lượt</span>
       </div>
-      <button className={completed ? 'complete-button compact' : 'round-arrow'} disabled={completed} onClick={onStart}>
-        {completed ? <CheckCircle2 size={18} /> : <ChevronRight size={18} />}
+      <button className="round-arrow" onClick={onStart} aria-label={`Xem ${ad.title}`}>
+        <PlayCircle size={18} />
       </button>
     </div>
   )
