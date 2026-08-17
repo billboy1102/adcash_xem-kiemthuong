@@ -41,3 +41,63 @@
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.268 21a2 2 0 0 0 3.464 0'/%3E%3Cpath d='M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.268 21a2 2 0 0 0 3.464 0'/%3E%3Cpath d='M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'/%3E%3C/svg%3E") center / contain no-repeat;
 }
+
+/* Referral model: 10% commission from the referred user's verified earnings. */
+.task-list .task-row:nth-child(2) .task-row-copy span {
+  font-size: 0 !important;
+}
+
+.task-list .task-row:nth-child(2) .task-row-copy span::after {
+  content: 'Nhận 10% số tiền bạn bè kiếm được';
+  font-size: 14px;
+}
+
+.task-list .task-row:nth-child(2) .task-row-reward strong {
+  font-size: 0 !important;
+}
+
+.task-list .task-row:nth-child(2) .task-row-reward strong::after {
+  content: '10%';
+  font-size: 20px;
+}
+
+/* Earn page: the referral card is the second card directly after the earn banner. */
+.earn-banner + .task-grid .task-card:nth-child(2) p {
+  font-size: 0 !important;
+}
+
+.earn-banner + .task-grid .task-card:nth-child(2) p::after {
+  content: 'Mời người mới bằng mã hoặc link của bạn. Sau khi được duyệt, bạn nhận 10% mỗi khoản thu nhập hợp lệ của họ.';
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.earn-banner + .task-grid .task-card:nth-child(2) .task-reward-row strong {
+  font-size: 0 !important;
+}
+
+.earn-banner + .task-grid .task-card:nth-child(2) .task-reward-row strong::after {
+  content: '10%';
+  font-size: 20px;
+}
+
+/* Referral page is the earn banner immediately followed by the referral stats grid. */
+.earn-banner:has(+ .stats-grid) > div:first-child p {
+  font-size: 0 !important;
+}
+
+.earn-banner:has(+ .stats-grid) > div:first-child p::after {
+  content: 'Người mới nhập mã của bạn khi đăng ký. Sau khi Admin duyệt, bạn nhận 10% hoa hồng từ số tiền họ kiếm được.';
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.earn-banner:has(+ .stats-grid) .earn-badge {
+  font-size: 0 !important;
+}
+
+.earn-banner:has(+ .stats-grid) .earn-badge::after {
+  content: '10% HOA HỒNG';
+  font-size: 14px;
+  font-weight: 800;
+}
