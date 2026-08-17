@@ -1,0 +1,17 @@
+{
+  "name": "Adcash: Xem & Kiếm Thưởng",
+  "short_name": "Adcash",
+  "description": "Ứng dụng nhiệm vụ thưởng và quản lý thu nhập.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#07110d",
+  "theme_color": "#07110d",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
