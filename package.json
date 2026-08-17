@@ -1,7 +1,7 @@
 {
   "name": "adcash-xem-kiemthuong",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -15,6 +15,7 @@
   "dependencies": {
     "@capacitor/android": "7.4.3",
     "@capacitor/core": "7.4.3",
+    "@supabase/supabase-js": "2.111.0",
     "lucide-react": "0.468.0",
     "react": "19.1.1",
     "react-dom": "19.1.1"
