@@ -8,24 +8,19 @@ Một source code dùng chung cho:
 
 ## Trạng thái hiện tại
 
-App đã bỏ hoàn toàn quảng cáo giả 6 giây và localStorage balance.
+Backend cũ đã được gỡ khỏi repo.
 
-Luồng hiện tại:
+Hiện tại:
 
-1. App tạo/khôi phục Supabase anonymous user.
-2. Monlix nhận `userid` là UUID Supabase của user.
-3. Monlix gửi S2S postback về Supabase Edge Function sau conversion hợp lệ.
-4. Edge Function xác minh `secretKey`, gọi RPC server-side.
-5. `transaction_id` là UNIQUE nên callback lặp không được cộng tiền hai lần.
-6. `status=2` được xử lý như chargeback và trừ lại reward đã ghi.
-7. Client chỉ đọc ví/lịch sử của chính user qua RLS.
-8. Rút tiền gọi RPC server-side, kiểm tra số dư và trừ ví atomically trước khi tạo yêu cầu pending.
+1. Giao diện web/app vẫn dùng chung source React/Vite.
+2. Không còn Auth, database, RPC hoặc Edge Function trong repo.
+3. Ví đang ở trạng thái chưa kết nối backend và không tự cộng số dư.
+4. Rút tiền chưa tạo giao dịch thật cho tới khi có backend thay thế.
+5. Phần Monlix vẫn có thể hiển thị nếu cấu hình `MONLIX_APP_ID`, nhưng không còn callback/database reward đi kèm.
 
-Không có API nào cho client tự insert reward hoặc tự update balance.
+## Monlix
 
-## Monlix cần cấu hình
-
-Monlix public HTML5 integration dùng:
+HTML5 integration hiện dùng:
 
 ```text
 https://offers.monlix.com/?appid=<APP_ID>&userid=<USER_ID>&subid=adcash
@@ -39,51 +34,14 @@ MONLIX_APP_ID
 
 Workflow đưa biến này vào `VITE_MONLIX_APP_ID` cho cả web, APK và AAB.
 
-### Postback URL
-
-Trong Monlix Dashboard đặt callback URL thành:
-
-```text
-https://lmtcnbhdnryivjgupuct.supabase.co/functions/v1/adcash-monlix-postback?userId={{userId}}&userIp={{userIp}}&countryCode={{countryCode}}&secretKey={{secretKey}}&taskName={{taskName}}&transactionId={{transactionId}}&rewardCurrency={{rewardCurrency}}&rewardValue={{rewardValue}}&payout={{payout}}&subId={{subId}}&status={{status}}
-```
-
-Supabase Edge Function phải có secret môi trường:
-
-```text
-MONLIX_SECRET_KEY=<Secret Key của site/app trong Monlix Dashboard>
-```
-
-Secret này **không** được đưa vào React, APK, AAB hoặc GitHub repo public.
-
-### Currency / reward
-
-Backend hiện lấy `rewardValue` Monlix gửi về làm số VND được cộng cho user. Vì vậy site/app Monlix phải cấu hình reward currency/multiplier đúng với mô hình chia doanh thu của Adcash.
-
-Nếu Adcash chỉ cho phép **xem video quảng cáo**, phía Monlix cũng phải cấu hình placement/site chỉ có Rewarded Video. HTML5 public docs của Monlix chỉ mô tả App ID + User ID; nếu account bật thêm offer/survey thì Monlix có thể hiển thị chúng.
-
-## Supabase production backend
-
-Project hiện dùng: `Bobbey` (`lmtcnbhdnryivjgupuct`).
-
-Adcash dùng các object riêng để không đụng dữ liệu project khác:
-
-- `adcash_wallets`
-- `adcash_reward_events`
-- `adcash_withdrawals`
-- `adcash_apply_monlix_postback(...)`
-- `adcash_request_withdrawal(...)`
-- Edge Function `adcash-monlix-postback`
-
-Schema nằm ở `supabase/schema.sql` và function source ở `supabase/functions/adcash-monlix-postback/index.ts`.
-
-Supabase Anonymous Sign-Ins phải được bật để app tạo UUID cho user mà không bắt đăng ký tài khoản.
+`USER_ID` hiện là ID cục bộ được tạo trên thiết bị, không phải tài khoản backend.
 
 ## Phát triển local
 
 ```bash
 npm install
 cp .env.example .env.local
-# điền VITE_MONLIX_APP_ID
+# điền VITE_MONLIX_APP_ID nếu còn dùng Monlix
 npm run dev
 ```
 
