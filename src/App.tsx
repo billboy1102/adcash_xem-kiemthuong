@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
-  ClipboardCheck,
   Clock3,
   Copy,
   Gift,
@@ -19,12 +18,10 @@ import {
   Info,
   Landmark,
   LockKeyhole,
-  MessageSquareText,
   PlayCircle,
   RotateCcw,
   Share2,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   Trophy,
   UserRound,
@@ -88,14 +85,6 @@ const initialTransactions: Transaction[] = [
     status: 'done',
   },
   {
-    id: 'survey-demo',
-    title: 'Khảo sát nhanh',
-    subtitle: 'Đối tác khảo sát • Demo',
-    amount: 1_200,
-    createdAt: 'Hôm qua, 21:42',
-    status: 'done',
-  },
-  {
     id: 'video-demo',
     title: 'Video tài trợ',
     subtitle: 'Đối tác thưởng • Demo',
@@ -128,31 +117,13 @@ const tasks: TaskItem[] = [
     featured: true,
   },
   {
-    id: 'quick-survey',
-    title: 'Khảo sát nhanh 2 phút',
-    description: 'Trả lời một khảo sát ngắn phù hợp với hồ sơ của bạn.',
-    reward: 1_200,
-    duration: '2–3 phút',
-    category: 'Khảo sát',
-    icon: MessageSquareText,
-  },
-  {
-    id: 'app-offer',
-    title: 'Trải nghiệm ứng dụng',
-    description: 'Hoàn thành yêu cầu của đối tác và chờ hệ thống xác nhận.',
-    reward: 4_500,
-    duration: '5–10 phút',
-    category: 'Offer',
-    icon: Smartphone,
-  },
-  {
-    id: 'mini-poll',
-    title: 'Bình chọn nhanh',
-    description: 'Chọn câu trả lời bạn yêu thích trong một bình chọn ngắn.',
-    reward: 250,
-    duration: '30 giây',
-    category: 'Bình chọn',
-    icon: ClipboardCheck,
+    id: 'referral-task',
+    title: 'Giới thiệu bạn bè',
+    description: 'Chia sẻ mã hoặc link mời và nhận thưởng khi người được giới thiệu đủ điều kiện.',
+    reward: REFERRAL_REWARD,
+    duration: 'Mời 1 người',
+    category: 'Giới thiệu',
+    icon: Users,
   },
 ]
 
@@ -237,8 +208,11 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [activeTask, seconds])
 
-  const completedCount = state.completedTaskIds.length
-  const progress = Math.min(100, Math.round((completedCount / tasks.length) * 100))
+  const completableTasks = tasks.filter((task) => task.id !== 'referral-task')
+  const completedCount = completableTasks.filter((task) => state.completedTaskIds.includes(task.id)).length
+  const progress = completableTasks.length
+    ? Math.min(100, Math.round((completedCount / completableTasks.length) * 100))
+    : 0
   const availableTasks = tasks.filter((task) => !state.completedTaskIds.includes(task.id))
   const checkedInToday = state.lastCheckInDate === todayKey()
 
@@ -247,6 +221,10 @@ export default function App() {
   }, [view])
 
   const startTask = (task: TaskItem) => {
+    if (task.id === 'referral-task') {
+      setView('referral')
+      return
+    }
     if (state.completedTaskIds.includes(task.id)) return
     setActiveTask(task)
     setSeconds(6)
@@ -617,7 +595,7 @@ function HomeView({
         <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         <div className="daily-footer">
           <span>{completedCount} nhiệm vụ đã xong</span>
-          <span>{Math.max(0, tasks.length - completedCount)} nhiệm vụ còn lại</span>
+          <span>{Math.max(0, completableTasks.length - completedCount)} nhiệm vụ còn lại</span>
         </div>
       </section>
 
@@ -685,7 +663,7 @@ function EarnView({ state, onStartTask }: { state: AppState; onStartTask: (task:
           <h2>Chọn nhiệm vụ phù hợp</h2>
           <p>Thưởng hiển thị dưới đây là dữ liệu mô phỏng để kiểm thử giao diện và luồng ứng dụng.</p>
         </div>
-        <div className="earn-badge"><Gift size={26} /> +6.300đ</div>
+        <div className="earn-badge"><Gift size={26} /> +5.350đ</div>
       </section>
 
       <section className="policy-banner">
