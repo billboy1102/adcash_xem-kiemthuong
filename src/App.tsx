@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  AlertTriangle,
   BadgeCheck,
   Banknote,
   BarChart3,
@@ -9,7 +10,6 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
-  Clock3,
   Copy,
   Eye,
   Home,
@@ -17,47 +17,58 @@ import {
   Landmark,
   LockKeyhole,
   PlayCircle,
-  RotateCcw,
+  RefreshCw,
+  Server,
   ShieldCheck,
-  Sparkles,
   Trophy,
   UserRound,
-  Video,
   WalletCards,
-  X,
+  Wifi,
   Zap,
 } from 'lucide-react'
+import { supabase } from './supabase'
+import './monlix.css'
 
 type View = 'home' | 'earn' | 'wallet' | 'withdraw' | 'profile'
-type TransactionStatus = 'done' | 'pending'
+type WithdrawalMethod = 'momo' | 'bank'
 
-type Transaction = {
+type Wallet = {
+  balance_vnd: number
+  lifetime_earned_vnd: number
+}
+
+type RewardEvent = {
+  id: number
+  transaction_id: string
+  task_name: string | null
+  reward_vnd: number
+  payout_usd: number
+  status: 'valid' | 'chargeback'
+  created_at: string
+  reversed_at: string | null
+}
+
+type Withdrawal = {
+  id: number
+  method: WithdrawalMethod
+  destination: string
+  amount_vnd: number
+  status: 'pending' | 'paid' | 'rejected'
+  created_at: string
+}
+
+type TimelineItem = {
   id: string
   title: string
   subtitle: string
   amount: number
   createdAt: string
-  status: TransactionStatus
+  status: string
 }
 
-type AdItem = {
-  id: string
-  title: string
-  description: string
-  reward: number
-  duration: string
-  sponsor: string
-  icon: LucideIcon
-  featured?: boolean
-}
-
-type AppState = {
-  balance: number
-  totalEarned: number
-  watchedAds: number
-  transactions: Transaction[]
-  userCode: string
-}
+const MONLIX_APP_ID = (import.meta.env.VITE_MONLIX_APP_ID ?? '').trim()
+const MONLIX_SUB_ID = 'adcash'
+const MIN_WITHDRAWAL = 50_000
 
 const money = new Intl.NumberFormat('vi-VN', {
   style: 'currency',
@@ -67,72 +78,6 @@ const money = new Intl.NumberFormat('vi-VN', {
 
 const compactMoney = (value: number) => `${new Intl.NumberFormat('vi-VN').format(value)}đ`
 
-const initialTransactions: Transaction[] = [
-  {
-    id: 'ad-demo-3',
-    title: 'Xem quảng cáo tài trợ',
-    subtitle: 'Sponsor C • Đã xem hoàn tất • Demo',
-    amount: 500,
-    createdAt: 'Hôm nay, 09:15',
-    status: 'done',
-  },
-  {
-    id: 'ad-demo-2',
-    title: 'Xem quảng cáo video',
-    subtitle: 'Sponsor B • Đã xem hoàn tất • Demo',
-    amount: 350,
-    createdAt: 'Hôm qua, 21:42',
-    status: 'done',
-  },
-  {
-    id: 'ad-demo-1',
-    title: 'Xem quảng cáo ngắn',
-    subtitle: 'Sponsor A • Đã xem hoàn tất • Demo',
-    amount: 250,
-    createdAt: 'Hôm qua, 20:08',
-    status: 'done',
-  },
-]
-
-const defaultState: AppState = {
-  balance: 1_100,
-  totalEarned: 1_100,
-  watchedAds: 3,
-  transactions: initialTransactions,
-  userCode: `ADC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-}
-
-const ads: AdItem[] = [
-  {
-    id: 'short-ad',
-    title: 'Xem quảng cáo ngắn',
-    description: 'Xem hết quảng cáo ngắn để hệ thống ghi nhận lượt xem hợp lệ.',
-    reward: 250,
-    duration: '15–30 giây',
-    sponsor: 'Sponsor A',
-    icon: PlayCircle,
-  },
-  {
-    id: 'video-ad',
-    title: 'Xem quảng cáo video',
-    description: 'Xem trọn video quảng cáo từ đối tác và nhận thưởng sau khi được xác nhận.',
-    reward: 350,
-    duration: '30–45 giây',
-    sponsor: 'Sponsor B',
-    icon: Video,
-    featured: true,
-  },
-  {
-    id: 'premium-ad',
-    title: 'Xem quảng cáo tài trợ',
-    description: 'Quảng cáo tài trợ có mức thưởng cao hơn khi hoàn thành toàn bộ thời lượng.',
-    reward: 500,
-    duration: '45–60 giây',
-    sponsor: 'Sponsor C',
-    icon: Eye,
-  },
-]
-
 const navItems: Array<{ id: View; label: string; icon: LucideIcon }> = [
   { id: 'home', label: 'Trang chủ', icon: Home },
   { id: 'earn', label: 'Xem quảng cáo', icon: PlayCircle },
@@ -141,127 +86,194 @@ const navItems: Array<{ id: View; label: string; icon: LucideIcon }> = [
   { id: 'profile', label: 'Hồ sơ', icon: UserRound },
 ]
 
-function loadState(): AppState {
+function formatTime(value: string) {
   try {
-    const saved = localStorage.getItem('adcash-ads-only-state-v2')
-    if (saved) return JSON.parse(saved) as AppState
+    return new Intl.DateTimeFormat('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value))
   } catch {
-    // Ignore corrupted local demo state.
+    return value
   }
-  return defaultState
 }
 
 export default function App() {
   const [view, setView] = useState<View>('home')
-  const [state, setState] = useState<AppState>(loadState)
-  const [activeAd, setActiveAd] = useState<AdItem | null>(null)
-  const [seconds, setSeconds] = useState(0)
+  const [userId, setUserId] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [wallet, setWallet] = useState<Wallet>({ balance_vnd: 0, lifetime_earned_vnd: 0 })
+  const [rewards, setRewards] = useState<RewardEvent[]>([])
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [toast, setToast] = useState('')
-  const [withdrawMethod, setWithdrawMethod] = useState<'momo' | 'bank'>('momo')
+  const [withdrawMethod, setWithdrawMethod] = useState<WithdrawalMethod>('momo')
   const [withdrawAccount, setWithdrawAccount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('50000')
+  const [submittingWithdrawal, setSubmittingWithdrawal] = useState(false)
+
+  const title = useMemo(() => navItems.find((item) => item.id === view)?.label ?? 'Adcash', [view])
+  const userCode = userId ? `ADC-${userId.replaceAll('-', '').slice(0, 8).toUpperCase()}` : 'ADC-...'
+  const watchedAds = rewards.filter((reward) => reward.status === 'valid').length
+
+  const timeline = useMemo<TimelineItem[]>(() => {
+    const rewardItems = rewards.map((reward) => ({
+      id: `reward-${reward.id}`,
+      title: reward.status === 'chargeback' ? 'Monlix hoàn tác phần thưởng' : (reward.task_name || 'Quảng cáo Monlix'),
+      subtitle: reward.status === 'chargeback'
+        ? `Transaction ${reward.transaction_id.slice(0, 10)}… • Chargeback`
+        : `Monlix • Server đã xác nhận • $${Number(reward.payout_usd || 0).toFixed(4)}`,
+      amount: reward.status === 'chargeback' ? -Number(reward.reward_vnd) : Number(reward.reward_vnd),
+      createdAt: reward.reversed_at || reward.created_at,
+      status: reward.status,
+    }))
+
+    const withdrawalItems = withdrawals.map((withdrawal) => ({
+      id: `withdrawal-${withdrawal.id}`,
+      title: withdrawal.method === 'momo' ? 'Rút tiền về MoMo' : 'Rút tiền về ngân hàng',
+      subtitle: `${withdrawal.destination} • ${withdrawal.status === 'pending' ? 'Đang chờ duyệt' : withdrawal.status === 'paid' ? 'Đã thanh toán' : 'Bị từ chối'}`,
+      amount: -Number(withdrawal.amount_vnd),
+      createdAt: withdrawal.created_at,
+      status: withdrawal.status,
+    }))
+
+    return [...rewardItems, ...withdrawalItems].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+  }, [rewards, withdrawals])
+
+  const refreshData = useCallback(async (quiet = false) => {
+    if (!userId) return
+    if (!quiet) setRefreshing(true)
+
+    const [walletResult, rewardResult, withdrawalResult] = await Promise.all([
+      supabase
+        .from('adcash_wallets')
+        .select('balance_vnd,lifetime_earned_vnd')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('adcash_reward_events')
+        .select('id,transaction_id,task_name,reward_vnd,payout_usd,status,created_at,reversed_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(60),
+      supabase
+        .from('adcash_withdrawals')
+        .select('id,method,destination,amount_vnd,status,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(40),
+    ])
+
+    if (walletResult.error || rewardResult.error || withdrawalResult.error) {
+      console.error(walletResult.error || rewardResult.error || withdrawalResult.error)
+      if (!quiet) setToast('Không thể đồng bộ ví từ server')
+    } else {
+      const serverWallet = walletResult.data as Wallet | null
+      setWallet(serverWallet ?? { balance_vnd: 0, lifetime_earned_vnd: 0 })
+      setRewards((rewardResult.data ?? []) as RewardEvent[])
+      setWithdrawals((withdrawalResult.data ?? []) as Withdrawal[])
+    }
+
+    if (!quiet) setRefreshing(false)
+  }, [userId])
+
+  const ensureSession = useCallback(async () => {
+    setLoading(true)
+    setAuthError('')
+
+    const { data: current, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError) {
+      setAuthError(sessionError.message)
+      setLoading(false)
+      return
+    }
+
+    if (current.session?.user?.id) {
+      setUserId(current.session.user.id)
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase.auth.signInAnonymously()
+    if (error || !data.user?.id) {
+      setAuthError(error?.message || 'Không tạo được tài khoản người dùng')
+      setLoading(false)
+      return
+    }
+
+    setUserId(data.user.id)
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
-    localStorage.setItem('adcash-ads-only-state-v2', JSON.stringify(state))
-  }, [state])
+    void ensureSession()
+  }, [ensureSession])
+
+  useEffect(() => {
+    if (!userId) return
+    void refreshData()
+
+    const interval = window.setInterval(() => void refreshData(true), 8000)
+    const onFocus = () => void refreshData(true)
+    window.addEventListener('focus', onFocus)
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [refreshData, userId])
 
   useEffect(() => {
     if (!toast) return
-    const timer = window.setTimeout(() => setToast(''), 2600)
+    const timer = window.setTimeout(() => setToast(''), 3200)
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  useEffect(() => {
-    if (!activeAd || seconds <= 0) return
-    const timer = window.setTimeout(() => setSeconds((value) => value - 1), 1000)
-    return () => window.clearTimeout(timer)
-  }, [activeAd, seconds])
-
-  const dailyGoal = 10
-  const progress = Math.min(100, Math.round((state.watchedAds / dailyGoal) * 100))
-
-  const title = useMemo(() => {
-    return navItems.find((item) => item.id === view)?.label ?? 'Adcash'
-  }, [view])
-
-  const startAd = (ad: AdItem) => {
-    setActiveAd(ad)
-    setSeconds(6)
-  }
-
-  const claimAd = () => {
-    if (!activeAd || seconds > 0) return
-    const ad = activeAd
-    const transaction: Transaction = {
-      id: `${ad.id}-${Date.now()}`,
-      title: ad.title,
-      subtitle: `${ad.sponsor} • Đã xem hoàn tất • Demo`,
-      amount: ad.reward,
-      createdAt: 'Vừa xong',
-      status: 'done',
-    }
-
-    setState((current) => ({
-      ...current,
-      balance: current.balance + ad.reward,
-      totalEarned: current.totalEarned + ad.reward,
-      watchedAds: current.watchedAds + 1,
-      transactions: [transaction, ...current.transactions],
-    }))
-    setActiveAd(null)
-    setToast(`Đã cộng ${compactMoney(ad.reward)} từ lượt xem quảng cáo demo`)
-  }
-
-  const submitWithdrawal = () => {
+  const submitWithdrawal = async () => {
     const amount = Number(withdrawAmount.replace(/\D/g, ''))
     if (!withdrawAccount.trim()) {
-      setToast('Nhập số MoMo hoặc thông tin tài khoản nhận tiền')
+      setToast('Nhập tài khoản nhận tiền')
       return
     }
-    if (!Number.isFinite(amount) || amount < 50_000) {
+    if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL) {
       setToast('Mức rút tối thiểu là 50.000đ')
       return
     }
-    if (amount > state.balance) {
-      setToast('Số dư hiện tại không đủ')
+    if (amount > wallet.balance_vnd) {
+      setToast('Số dư server hiện tại không đủ')
       return
     }
 
-    const transaction: Transaction = {
-      id: `withdraw-${Date.now()}`,
-      title: withdrawMethod === 'momo' ? 'Yêu cầu rút về MoMo' : 'Yêu cầu rút về ngân hàng',
-      subtitle: `${withdrawAccount.trim()} • Chờ duyệt demo`,
-      amount: -amount,
-      createdAt: 'Vừa xong',
-      status: 'pending',
+    setSubmittingWithdrawal(true)
+    const { error } = await supabase.rpc('adcash_request_withdrawal', {
+      p_method: withdrawMethod,
+      p_destination: withdrawAccount.trim(),
+      p_amount_vnd: amount,
+    })
+    setSubmittingWithdrawal(false)
+
+    if (error) {
+      console.error(error)
+      setToast(error.message.includes('insufficient') ? 'Số dư không đủ' : 'Không tạo được yêu cầu rút tiền')
+      return
     }
 
-    setState((current) => ({
-      ...current,
-      balance: current.balance - amount,
-      transactions: [transaction, ...current.transactions],
-    }))
     setWithdrawAccount('')
-    setToast('Đã tạo yêu cầu rút tiền demo')
+    setToast('Đã gửi yêu cầu rút tiền lên server')
+    await refreshData(true)
     setView('wallet')
-  }
-
-  const resetDemo = () => {
-    localStorage.removeItem('adcash-ads-only-state-v2')
-    setState({
-      ...defaultState,
-      userCode: `ADC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      transactions: [...initialTransactions],
-    })
-    setToast('Đã đặt lại dữ liệu xem quảng cáo demo')
   }
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(state.userCode)
+      await navigator.clipboard.writeText(userCode)
       setToast('Đã sao chép mã người dùng')
     } catch {
-      setToast(state.userCode)
+      setToast(userCode)
     }
   }
 
@@ -269,7 +281,7 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <Brand />
-        <div className="demo-pill"><span /> Chế độ demo</div>
+        <div className="demo-pill live-pill"><span /> Server reward</div>
         <nav className="side-nav" aria-label="Điều hướng chính">
           {navItems.map((item) => {
             const Icon = item.icon
@@ -288,8 +300,8 @@ export default function App() {
         <div className="sidebar-security">
           <ShieldCheck size={22} />
           <div>
-            <strong>Chỉ thưởng khi xem quảng cáo</strong>
-            <span>Không có điểm danh, khảo sát, cài app hay nguồn thưởng khác.</span>
+            <strong>Server mới được cộng tiền</strong>
+            <span>Client không còn nút nhận thưởng hay timer quảng cáo giả.</span>
           </div>
         </div>
       </aside>
@@ -301,45 +313,53 @@ export default function App() {
             <h1>{title}</h1>
           </div>
           <div className="top-actions">
+            <button className="icon-button" aria-label="Làm mới" onClick={() => void refreshData()} disabled={refreshing || !userId}>
+              <RefreshCw size={19} className={refreshing ? 'spin' : ''} />
+            </button>
             <button className="icon-button" aria-label="Thông báo"><Bell size={20} /></button>
             <button className="avatar-button" onClick={() => setView('profile')}>A</button>
           </div>
         </header>
 
         <div className="content-wrap">
-          {view === 'home' && (
-            <HomeView
-              state={state}
-              dailyGoal={dailyGoal}
-              progress={progress}
-              onViewChange={setView}
-              onStartAd={startAd}
-            />
-          )}
-
-          {view === 'earn' && (
-            <AdsView onStartAd={startAd} />
-          )}
-
-          {view === 'wallet' && (
-            <WalletView state={state} onWithdraw={() => setView('withdraw')} />
-          )}
-
-          {view === 'withdraw' && (
-            <WithdrawView
-              state={state}
-              method={withdrawMethod}
-              setMethod={setWithdrawMethod}
-              account={withdrawAccount}
-              setAccount={setWithdrawAccount}
-              amount={withdrawAmount}
-              setAmount={setWithdrawAmount}
-              onSubmit={submitWithdrawal}
-            />
-          )}
-
-          {view === 'profile' && (
-            <ProfileView state={state} onCopy={copyCode} onReset={resetDemo} />
+          {loading ? (
+            <LoadingState />
+          ) : authError ? (
+            <AuthErrorState error={authError} onRetry={() => void ensureSession()} />
+          ) : (
+            <>
+              {view === 'home' && (
+                <HomeView wallet={wallet} watchedAds={watchedAds} onViewChange={setView} />
+              )}
+              {view === 'earn' && (
+                <AdsView userId={userId} onRefresh={() => void refreshData()} />
+              )}
+              {view === 'wallet' && (
+                <WalletView wallet={wallet} timeline={timeline} onWithdraw={() => setView('withdraw')} />
+              )}
+              {view === 'withdraw' && (
+                <WithdrawView
+                  wallet={wallet}
+                  method={withdrawMethod}
+                  setMethod={setWithdrawMethod}
+                  account={withdrawAccount}
+                  setAccount={setWithdrawAccount}
+                  amount={withdrawAmount}
+                  setAmount={setWithdrawAmount}
+                  submitting={submittingWithdrawal}
+                  onSubmit={() => void submitWithdrawal()}
+                />
+              )}
+              {view === 'profile' && (
+                <ProfileView
+                  wallet={wallet}
+                  watchedAds={watchedAds}
+                  userCode={userCode}
+                  userId={userId}
+                  onCopy={copyCode}
+                />
+              )}
+            </>
           )}
         </div>
       </main>
@@ -348,26 +368,13 @@ export default function App() {
         {navItems.map((item) => {
           const Icon = item.icon
           return (
-            <button
-              key={item.id}
-              className={view === item.id ? 'active' : ''}
-              onClick={() => setView(item.id)}
-            >
+            <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}>
               <Icon size={21} />
               <span>{item.id === 'earn' ? 'Quảng cáo' : item.label}</span>
             </button>
           )
         })}
       </nav>
-
-      {activeAd && (
-        <AdModal
-          ad={activeAd}
-          seconds={seconds}
-          onClose={() => setActiveAd(null)}
-          onClaim={claimAd}
-        />
-      )}
 
       {toast && <div className="toast"><CheckCircle2 size={18} /> {toast}</div>}
     </div>
@@ -386,33 +393,50 @@ function Brand() {
   )
 }
 
+function LoadingState() {
+  return (
+    <section className="section-card integration-state">
+      <RefreshCw size={28} className="spin" />
+      <div><h2>Đang kết nối server</h2><p>Đang tạo phiên người dùng và tải ví Adcash.</p></div>
+    </section>
+  )
+}
+
+function AuthErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <section className="section-card integration-state error-state">
+      <AlertTriangle size={30} />
+      <div>
+        <h2>Supabase Auth chưa sẵn sàng</h2>
+        <p>{error}</p>
+        <p className="muted-line">Adcash dùng anonymous Auth để mỗi thiết bị có UUID riêng cho Monlix postback. Anonymous Sign-Ins phải được bật trong Supabase Auth.</p>
+        <button className="primary-button small" onClick={onRetry}>Thử lại</button>
+      </div>
+    </section>
+  )
+}
+
 function HomeView({
-  state,
-  dailyGoal,
-  progress,
+  wallet,
+  watchedAds,
   onViewChange,
-  onStartAd,
 }: {
-  state: AppState
-  dailyGoal: number
-  progress: number
+  wallet: Wallet
+  watchedAds: number
   onViewChange: (view: View) => void
-  onStartAd: (ad: AdItem) => void
 }) {
   return (
     <div className="page-stack">
       <section className="hero-card">
         <div className="hero-copy">
-          <span className="hero-label"><PlayCircle size={15} /> Xem quảng cáo & nhận thưởng</span>
-          <div className="balance">{money.format(state.balance)}</div>
-          <p>Nguồn thu nhập duy nhất trong Adcash là xem quảng cáo. Xem hết quảng cáo hợp lệ để nhận tiền thưởng.</p>
+          <span className="hero-label"><PlayCircle size={15} /> Monlix Rewarded Ads</span>
+          <div className="balance">{money.format(wallet.balance_vnd)}</div>
+          <p>Tiền chỉ xuất hiện trong ví sau khi Monlix gửi postback hợp lệ về server Adcash. App không thể tự cộng tiền.</p>
           <div className="hero-actions">
             <button className="primary-button" onClick={() => onViewChange('earn')}>
-              Xem quảng cáo ngay <ChevronRight size={18} />
+              Xem quảng cáo Monlix <ChevronRight size={18} />
             </button>
-            <button className="secondary-button" onClick={() => onViewChange('withdraw')}>
-              Rút tiền
-            </button>
+            <button className="secondary-button" onClick={() => onViewChange('withdraw')}>Rút tiền</button>
           </div>
         </div>
         <div className="hero-orb" aria-hidden="true">
@@ -423,123 +447,115 @@ function HomeView({
       </section>
 
       <section className="stats-grid">
-        <StatCard icon={Trophy} label="Tổng đã kiếm" value={compactMoney(state.totalEarned)} detail="100% từ quảng cáo" />
-        <StatCard icon={Eye} label="Quảng cáo đã xem" value={`${state.watchedAds}`} detail="Lượt xem demo" />
+        <StatCard icon={Trophy} label="Tổng đã kiếm" value={compactMoney(wallet.lifetime_earned_vnd)} detail="Server verified" />
+        <StatCard icon={Eye} label="Reward hợp lệ" value={`${watchedAds}`} detail="Monlix postback" />
         <StatCard icon={BarChart3} label="Mức rút tối thiểu" value="50.000đ" detail="MoMo / Ngân hàng" />
       </section>
 
-      <section className="section-card daily-card">
-        <div className="section-heading compact-heading">
-          <div>
-            <span className="eyebrow">Mục tiêu xem quảng cáo</span>
-            <h2>{dailyGoal} quảng cáo</h2>
-          </div>
-          <span className="progress-value">{progress}%</span>
-        </div>
-        <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
-        <div className="daily-footer">
-          <span>{state.watchedAds} lượt đã xem</span>
-          <span>{Math.max(0, dailyGoal - state.watchedAds)} lượt để đạt mục tiêu</span>
-        </div>
-      </section>
-
-      <section className="section-card">
+      <section className="section-card server-flow-card">
         <div className="section-heading">
-          <div>
-            <span className="eyebrow">Quảng cáo đang có</span>
-            <h2>Xem để kiếm tiền</h2>
-          </div>
-          <button className="text-button" onClick={() => onViewChange('earn')}>Xem tất cả <ChevronRight size={16} /></button>
+          <div><span className="eyebrow">Luồng phần thưởng</span><h2>Không còn quảng cáo giả</h2></div>
+          <span className="verified-chip"><BadgeCheck size={16} /> S2S</span>
         </div>
-        <div className="task-list">
-          {ads.map((ad) => (
-            <AdRow key={ad.id} ad={ad} onStart={() => onStartAd(ad)} />
-          ))}
+        <div className="server-flow">
+          <FlowStep icon={PlayCircle} title="1. Người dùng xem" text="Monlix hiển thị nội dung thật." />
+          <FlowStep icon={Wifi} title="2. Monlix xác nhận" text="Monlix gửi transactionId về Edge Function." />
+          <FlowStep icon={Server} title="3. Server cộng ví" text="Supabase chống trùng rồi mới ghi số dư." />
         </div>
       </section>
 
       <section className="safe-note">
         <LockKeyhole size={22} />
         <div>
-          <strong>Không có cách kiếm tiền nào khác</strong>
-          <p>Không thưởng điểm danh, khảo sát, giới thiệu bạn bè, tải ứng dụng hay thao tác khác. Chỉ lượt xem quảng cáo được xác nhận mới tạo thu nhập.</p>
+          <strong>Chỉ reward từ Monlix mới được tính</strong>
+          <p>Không có điểm danh, khảo sát nội bộ, tải app giả, nút nhận thưởng hay localStorage để tự sửa số dư.</p>
         </div>
       </section>
     </div>
   )
 }
 
-function AdsView({ onStartAd }: { onStartAd: (ad: AdItem) => void }) {
+function AdsView({ userId, onRefresh }: { userId: string; onRefresh: () => void }) {
+  const monlixUrl = MONLIX_APP_ID
+    ? `https://offers.monlix.com/?appid=${encodeURIComponent(MONLIX_APP_ID)}&userid=${encodeURIComponent(userId)}&subid=${MONLIX_SUB_ID}`
+    : ''
+
   return (
     <div className="page-stack">
       <section className="earn-banner">
         <div>
-          <span className="eyebrow">Kiếm tiền bằng quảng cáo</span>
-          <h2>Chọn quảng cáo để xem</h2>
-          <p>Xem trọn quảng cáo. Khi hệ thống xác nhận lượt xem hợp lệ, phần thưởng mới được cộng vào số dư.</p>
+          <span className="eyebrow">Monlix production</span>
+          <h2>Xem quảng cáo thật</h2>
+          <p>Không có đếm ngược giả. Khi Monlix ghi nhận conversion, postback server mới làm số dư thay đổi.</p>
         </div>
-        <div className="earn-badge"><PlayCircle size={26} /> Chỉ quảng cáo</div>
+        <div className="earn-badge"><ShieldCheck size={25} /> Server verified</div>
       </section>
 
-      <section className="policy-banner">
-        <Info size={20} />
-        <div>
-          <strong>Đang ở chế độ demo</strong>
-          <span>Thời gian xem đang được rút ngắn để kiểm thử. Bản production phải nhận xác nhận hợp lệ từ mạng quảng cáo/server trước khi cộng tiền.</span>
-        </div>
-      </section>
-
-      <div className="task-grid">
-        {ads.map((ad) => {
-          const Icon = ad.icon
-          return (
-            <article key={ad.id} className={`task-card ${ad.featured ? 'featured' : ''}`}>
-              <div className="task-card-top">
-                <div className="task-icon"><Icon size={24} /></div>
-                <span className="category-chip">Quảng cáo</span>
-              </div>
-              <h3>{ad.title}</h3>
-              <p>{ad.description}</p>
-              <div className="task-meta"><Clock3 size={15} /> {ad.duration} • {ad.sponsor}</div>
-              <div className="task-reward-row">
-                <div>
-                  <span>Tiền nhận được</span>
-                  <strong>+{compactMoney(ad.reward)}</strong>
-                </div>
-                <button className="primary-button small" onClick={() => onStartAd(ad)}>
-                  Xem ngay <PlayCircle size={16} />
-                </button>
-              </div>
-            </article>
-          )
-        })}
-      </div>
+      {!MONLIX_APP_ID ? (
+        <section className="section-card integration-state warning-state">
+          <Info size={30} />
+          <div>
+            <h2>Thiếu Monlix App ID</h2>
+            <p>Code live đã nối sẵn nhưng repo chưa có App ID của site/app Monlix đã được duyệt. Vì vậy tao không nhét ID giả vào app.</p>
+            <p className="muted-line">Sau khi có App ID, đặt GitHub repository variable <strong>MONLIX_APP_ID</strong>. Workflow sẽ đưa nó vào cả web, APK và AAB.</p>
+          </div>
+        </section>
+      ) : (
+        <section className="section-card monlix-card">
+          <div className="section-heading monlix-heading">
+            <div>
+              <span className="eyebrow">Live inventory</span>
+              <h2>Monlix</h2>
+            </div>
+            <button className="secondary-button" onClick={onRefresh}><RefreshCw size={16} /> Cập nhật ví</button>
+          </div>
+          <div className="policy-banner live-policy">
+            <Info size={20} />
+            <div>
+              <strong>Placement Monlix phải cấu hình Rewarded Video</strong>
+              <span>Monlix HTML5 dùng App ID + User ID. Nếu tài khoản Monlix bật thêm loại offer khác thì chính Monlix có thể hiển thị chúng; để Adcash chỉ có video, site/placement phía Monlix phải để Rewarded Video only.</span>
+            </div>
+          </div>
+          <div className="monlix-frame-shell">
+            <iframe
+              className="monlix-frame"
+              title="Monlix Rewarded Ads"
+              src={monlixUrl}
+              allow="autoplay; clipboard-write"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          </div>
+          <div className="monlix-footnote">
+            <Server size={18} />
+            <span>Đóng quảng cáo xong không tự cộng tiền. Ví tự đồng bộ từ Supabase mỗi vài giây sau khi postback hợp lệ đến.</span>
+          </div>
+        </section>
+      )}
     </div>
   )
 }
 
-function WalletView({ state, onWithdraw }: { state: AppState; onWithdraw: () => void }) {
+function WalletView({ wallet, timeline, onWithdraw }: { wallet: Wallet; timeline: TimelineItem[]; onWithdraw: () => void }) {
   return (
     <div className="page-stack">
       <section className="wallet-hero">
         <div>
-          <span>Số dư khả dụng</span>
-          <strong>{money.format(state.balance)}</strong>
-          <small>Tổng thu nhập từ quảng cáo demo: {money.format(state.totalEarned)}</small>
+          <span>Số dư server</span>
+          <strong>{money.format(wallet.balance_vnd)}</strong>
+          <small>Tổng reward đã xác nhận: {money.format(wallet.lifetime_earned_vnd)}</small>
         </div>
         <button className="light-button" onClick={onWithdraw}><Landmark size={18} /> Rút tiền</button>
       </section>
 
       <section className="section-card">
         <div className="section-heading">
-          <div>
-            <span className="eyebrow">Dòng tiền</span>
-            <h2>Lịch sử giao dịch</h2>
-          </div>
-          <span className="count-chip">{state.transactions.length} giao dịch</span>
+          <div><span className="eyebrow">Server ledger</span><h2>Lịch sử giao dịch</h2></div>
+          <span className="count-chip">{timeline.length} giao dịch</span>
         </div>
         <div className="transaction-list">
-          {state.transactions.map((transaction) => (
+          {timeline.length === 0 ? (
+            <div className="empty-ledger">Chưa có reward Monlix hoặc yêu cầu rút tiền nào.</div>
+          ) : timeline.map((transaction) => (
             <div className="transaction-row" key={transaction.id}>
               <div className={`transaction-icon ${transaction.amount < 0 ? 'out' : ''}`}>
                 {transaction.amount < 0 ? <Landmark size={19} /> : <PlayCircle size={19} />}
@@ -552,7 +568,7 @@ function WalletView({ state, onWithdraw }: { state: AppState; onWithdraw: () => 
                 <strong className={transaction.amount < 0 ? 'negative' : 'positive'}>
                   {transaction.amount > 0 ? '+' : '-'}{compactMoney(Math.abs(transaction.amount))}
                 </strong>
-                <span>{transaction.status === 'pending' ? 'Đang xử lý' : transaction.createdAt}</span>
+                <span>{formatTime(transaction.createdAt)}</span>
               </div>
             </div>
           ))}
@@ -563,33 +579,30 @@ function WalletView({ state, onWithdraw }: { state: AppState; onWithdraw: () => 
 }
 
 function WithdrawView({
-  state,
+  wallet,
   method,
   setMethod,
   account,
   setAccount,
   amount,
   setAmount,
+  submitting,
   onSubmit,
 }: {
-  state: AppState
-  method: 'momo' | 'bank'
-  setMethod: (value: 'momo' | 'bank') => void
+  wallet: Wallet
+  method: WithdrawalMethod
+  setMethod: (value: WithdrawalMethod) => void
   account: string
   setAccount: (value: string) => void
   amount: string
   setAmount: (value: string) => void
+  submitting: boolean
   onSubmit: () => void
 }) {
   return (
     <div className="withdraw-layout">
       <section className="section-card withdraw-form-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Yêu cầu thanh toán</span>
-            <h2>Rút tiền</h2>
-          </div>
-        </div>
+        <div className="section-heading"><div><span className="eyebrow">Server request</span><h2>Rút tiền</h2></div></div>
 
         <label className="field-label">Phương thức nhận tiền</label>
         <div className="method-grid">
@@ -618,7 +631,7 @@ function WithdrawView({
 
         <div className="field-row">
           <label className="field-label" htmlFor="withdraw-amount">Số tiền muốn rút</label>
-          <button className="text-button" onClick={() => setAmount(String(state.balance))}>Rút tối đa</button>
+          <button className="text-button" onClick={() => setAmount(String(Math.max(0, wallet.balance_vnd)))}>Rút tối đa</button>
         </div>
         <div className="money-input-wrap">
           <input
@@ -636,105 +649,68 @@ function WithdrawView({
           ))}
         </div>
 
-        <button className="primary-button wide" onClick={onSubmit}>
-          Gửi yêu cầu rút tiền <ChevronRight size={18} />
+        <button className="primary-button wide" disabled={submitting} onClick={onSubmit}>
+          {submitting ? 'Đang gửi lên server…' : 'Gửi yêu cầu rút tiền'} <ChevronRight size={18} />
         </button>
-        <p className="form-footnote">Bản demo chỉ mô phỏng yêu cầu rút, không thực hiện chuyển tiền thật.</p>
+        <p className="form-footnote">Yêu cầu được ghi vào Supabase và số tiền bị giữ/trừ khỏi ví ngay trên server để tránh chi tiêu hai lần.</p>
       </section>
 
       <aside className="withdraw-summary">
-        <div className="summary-balance">
-          <span>Số dư hiện tại</span>
-          <strong>{money.format(state.balance)}</strong>
-        </div>
+        <div className="summary-balance"><span>Số dư hiện tại</span><strong>{money.format(wallet.balance_vnd)}</strong></div>
         <div className="summary-line"><span>Mức rút tối thiểu</span><strong>50.000đ</strong></div>
         <div className="summary-line"><span>Phí rút tiền</span><strong>0đ</strong></div>
-        <div className="summary-line"><span>Nguồn thu nhập</span><strong className="positive">Quảng cáo</strong></div>
-        <div className="summary-note"><ShieldCheck size={20} /><span>Production cần backend xác minh lượt xem và duyệt thanh toán.</span></div>
+        <div className="summary-line"><span>Nguồn thu nhập</span><strong className="positive">Monlix</strong></div>
+        <div className="summary-note"><ShieldCheck size={20} /><span>Admin vẫn phải duyệt/chuyển tiền thật cho các yêu cầu pending.</span></div>
       </aside>
     </div>
   )
 }
 
-function ProfileView({ state, onCopy, onReset }: { state: AppState; onCopy: () => void; onReset: () => void }) {
+function ProfileView({
+  wallet,
+  watchedAds,
+  userCode,
+  userId,
+  onCopy,
+}: {
+  wallet: Wallet
+  watchedAds: number
+  userCode: string
+  userId: string
+  onCopy: () => void
+}) {
   return (
     <div className="profile-layout">
       <section className="section-card profile-card">
         <div className="profile-avatar">A</div>
         <div className="profile-copy">
-          <span className="eyebrow">Tài khoản demo</span>
+          <span className="eyebrow">Supabase anonymous user</span>
           <h2>Người dùng Adcash</h2>
-          <button className="code-button" onClick={onCopy}>{state.userCode} <Copy size={14} /></button>
+          <button className="code-button" onClick={onCopy}>{userCode} <Copy size={14} /></button>
         </div>
-        <span className="verified-chip"><BadgeCheck size={16} /> Đang hoạt động</span>
+        <span className="verified-chip"><BadgeCheck size={16} /> Server ID</span>
       </section>
 
       <section className="profile-stats">
-        <StatCard icon={WalletCards} label="Số dư" value={compactMoney(state.balance)} detail="Khả dụng" />
-        <StatCard icon={Trophy} label="Tổng thu nhập" value={compactMoney(state.totalEarned)} detail="Từ quảng cáo" />
-        <StatCard icon={Eye} label="Đã xem" value={`${state.watchedAds}`} detail="Quảng cáo" />
+        <StatCard icon={WalletCards} label="Số dư" value={compactMoney(wallet.balance_vnd)} detail="Server" />
+        <StatCard icon={Trophy} label="Tổng thu nhập" value={compactMoney(wallet.lifetime_earned_vnd)} detail="Monlix" />
+        <StatCard icon={Eye} label="Reward hợp lệ" value={`${watchedAds}`} detail="Postback" />
       </section>
 
       <section className="section-card settings-card">
-        <div className="setting-row"><div className="setting-icon"><ShieldCheck size={20} /></div><div><strong>Bảo mật tài khoản</strong><span>Auth + RLS sẽ được bật khi nối backend production.</span></div><ChevronRight size={18} /></div>
-        <div className="setting-row"><div className="setting-icon"><Landmark size={20} /></div><div><strong>Phương thức thanh toán</strong><span>MoMo và tài khoản ngân hàng.</span></div><ChevronRight size={18} /></div>
-        <div className="setting-row"><div className="setting-icon"><Zap size={20} /></div><div><strong>Cách kiếm tiền</strong><span>Chỉ xem quảng cáo hợp lệ để nhận thưởng.</span></div><ChevronRight size={18} /></div>
-      </section>
-
-      <section className="section-card developer-card">
-        <div>
-          <span className="eyebrow">Dành cho phát triển</span>
-          <h3>Đặt lại dữ liệu kiểm thử</h3>
-          <p>Xóa dữ liệu xem quảng cáo và giao dịch trong localStorage rồi tạo lại dữ liệu demo mặc định.</p>
-        </div>
-        <button className="secondary-button danger" onClick={onReset}><RotateCcw size={17} /> Đặt lại demo</button>
+        <div className="setting-row"><div className="setting-icon"><ShieldCheck size={20} /></div><div><strong>RLS đang bật</strong><span>Người dùng chỉ đọc được ví và giao dịch của chính UUID này.</span></div><ChevronRight size={18} /></div>
+        <div className="setting-row"><div className="setting-icon"><Server size={20} /></div><div><strong>Monlix S2S</strong><span>Transaction ID được khóa UNIQUE để chống cộng tiền hai lần.</span></div><ChevronRight size={18} /></div>
+        <div className="setting-row"><div className="setting-icon"><Zap size={20} /></div><div><strong>User UUID</strong><span className="uuid-text">{userId}</span></div><ChevronRight size={18} /></div>
       </section>
     </div>
   )
 }
 
-function AdModal({ ad, seconds, onClose, onClaim }: { ad: AdItem; seconds: number; onClose: () => void; onClaim: () => void }) {
-  const Icon = ad.icon
-  const progress = Math.round(((6 - seconds) / 6) * 100)
+function FlowStep({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={ad.title}>
-      <div className="task-modal">
-        <button className="modal-close" onClick={onClose} aria-label="Đóng"><X size={20} /></button>
-        <div className="modal-task-icon"><Icon size={30} /></div>
-        <span className="demo-tag">MÔ PHỎNG QUẢNG CÁO</span>
-        <h2>{ad.title}</h2>
-        <p>{ad.description}</p>
-        <div className="modal-reward"><span>Tiền nhận được</span><strong>+{compactMoney(ad.reward)}</strong></div>
-        <div className="countdown-ring" style={{ '--progress': `${progress}%` } as React.CSSProperties}>
-          <div>{seconds > 0 ? <><strong>{seconds}</strong><span>giây</span></> : <CheckCircle2 size={36} />}</div>
-        </div>
-        <p className="modal-note">
-          {seconds > 0 ? 'Đang mô phỏng thời gian xem quảng cáo…' : 'Quảng cáo demo đã xem hết. Production phải chờ mạng quảng cáo/server xác nhận trước khi cộng tiền.'}
-        </p>
-        <button className="primary-button wide" disabled={seconds > 0} onClick={onClaim}>
-          {seconds > 0 ? `Còn ${seconds} giây` : `Nhận ${compactMoney(ad.reward)}`}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function AdRow({ ad, onStart }: { ad: AdItem; onStart: () => void }) {
-  const Icon = ad.icon
-  return (
-    <div className="task-row">
-      <div className="task-icon"><Icon size={22} /></div>
-      <div className="task-row-copy">
-        <strong>{ad.title}</strong>
-        <span><Clock3 size={14} /> {ad.duration} • {ad.sponsor}</span>
-      </div>
-      <div className="task-row-reward">
-        <strong>+{compactMoney(ad.reward)}</strong>
-        <span>mỗi lượt</span>
-      </div>
-      <button className="round-arrow" onClick={onStart} aria-label={`Xem ${ad.title}`}>
-        <PlayCircle size={18} />
-      </button>
+    <div className="flow-step">
+      <div className="setting-icon"><Icon size={20} /></div>
+      <div><strong>{title}</strong><span>{text}</span></div>
     </div>
   )
 }
