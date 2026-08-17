@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_MONLIX_APP_ID: ${{ vars.MONLIX_APP_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
