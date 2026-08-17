@@ -1,0 +1,94 @@
+name: Build Web + Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: adcash-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web
+        run: npm run build
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload web for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build Android web bundle
+        run: CAPACITOR_BUILD=1 npm run build
+
+      - name: Generate Android project
+        run: npx cap add android
+
+      - name: Sync Android project
+        run: npx cap sync android
+
+      - name: Build APK and AAB
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug bundleDebug
+
+      - name: Rename Android outputs
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Adcash-Xem-Kiem-Thuong-debug.apk
+          cp android/app/build/outputs/bundle/debug/app-debug.aab Adcash-Xem-Kiem-Thuong-debug.aab
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Adcash-APK
+          path: Adcash-Xem-Kiem-Thuong-debug.apk
+          if-no-files-found: error
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: Adcash-AAB
+          path: Adcash-Xem-Kiem-Thuong-debug.aab
+          if-no-files-found: error
+
+  deploy-web:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
